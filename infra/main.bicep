@@ -6,8 +6,10 @@ param location string = resourceGroup().location
 @maxLength(24)
 param storageAccountName string
 param staticWebAppName string
-@description('Email address for the monthly resource-group cost budget alerts.')
-param budgetContactEmail string
+@description('Enable a Cost Management budget where the subscription offer supports budgets.')
+param enableCostBudget bool = false
+@description('Email address for monthly resource-group budget alerts when enabled.')
+param budgetContactEmail string = ''
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName
@@ -55,7 +57,7 @@ resource site 'Microsoft.Web/staticSites@2022-09-01' = {
   tags: { application: 'MimisJapanShopping', managedBy: 'Bicep' }
 }
 
-resource monthlyBudget 'Microsoft.Consumption/budgets@2018-10-01' = {
+resource monthlyBudget 'Microsoft.Consumption/budgets@2018-10-01' = if (enableCostBudget) {
   name: 'mimi-shopping-monthly-cost-alert'
   properties: {
     category: 'Cost'

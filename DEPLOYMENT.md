@@ -8,7 +8,7 @@
 - Storage: StorageV2, Standard LRS, Hot tier, HTTPS only, TLS 1.2; `gallery` Blob container exposes anonymous blob reads but not container listing. The `TagOverrides` Table is private.
 - The photos and the catalog/research text are public. Do not store credentials or private notes in `catalog-data.js`.
 
-Provision the resource group, then run `infra/main.bicep` with the storage and Static Web App names plus the alert recipient email. The template creates a £5-equivalent monthly resource-group cost budget with notifications at 80% and 100%; the amount is evaluated in the subscription's billing currency. Grant the deploying user `Storage Blob Data Contributor` on the storage account. Set `TABLE_ENDPOINT` and `TABLE_SAS_TOKEN` in the Static Web App's API application settings; neither belongs in this repository. The Function SAS must be scoped to `TagOverrides`, HTTPS-only, and limited to read/query, add, update, and delete.
+Provision the resource group, then run `infra/main.bicep` with the storage and Static Web App names. The template can create a monthly resource-group budget of 5 billing-currency units with 80% and 100% notifications by setting `enableCostBudget=true` and supplying `budgetContactEmail`. Azure rejected budgets for this Visual Studio subscription's offer type, so the feature defaults off here. Grant the deploying user `Storage Blob Data Contributor` on the storage account. Set `TABLE_ENDPOINT` and `TABLE_SAS_TOKEN` in the Static Web App's API application settings; neither belongs in this repository. The Function SAS must be scoped to `TagOverrides`, HTTPS-only, and limited to read/query, add, update, and delete.
 
 ## GitHub deployment
 
