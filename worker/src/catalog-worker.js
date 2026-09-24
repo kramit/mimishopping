@@ -141,18 +141,19 @@ async function normalizeImages(source) {
 
 function itemId(queueItem) {
   const value = typeof queueItem === 'string' ? JSON.parse(queueItem) : queueItem;
-  if (!value || !['process', 'publish', 'remove'].includes(value.type) || !/^[a-f0-9]{64}$/i.test(value.id || '')) throw new Error('Invalid catalog queue message.');
-  return {type: value.type, id: value.id.toLowerCase()};
+  if (!value || !['process', 'publish', 'remove'].includes(value.type) || !/^[a-f0-9]{64}$/i.test(value.id || '') || (value.attemptId !== undefined && !/^[a-f0-9]{32}$/i.test(value.attemptId))) throw new Error('Invalid catalog queue message.');
+  return {type: value.type, id: value.id.toLowerCase(), ...(value.attemptId ? {attemptId: value.attemptId.toLowerCase()} : {})};
 }
 
 async function updateEntity(table, id, changes) {
   await table.updateEntity({partitionKey: PARTITION, rowKey: id, ...changes}, 'Merge', {etag: '*'});
 }
 
-async function processImage(id, context, deps = {}) {
+async function processImage(id, context, deps = {}, attemptId = '') {
   const table = deps.table || getTable();
   const inbox = (deps.blobService || getBlobService()).getContainerClient(process.env.CATALOG_INTAKE_CONTAINER || 'contribution-inbox');
   const item = await table.getEntity(PARTITION, id);
+  if (item.activeAttemptId ? item.activeAttemptId !== attemptId : Boolean(attemptId)) return;
   if (['ready', 'publishing', 'published', 'hidden'].includes(item.status)) return;
   if (item.expiresAt && item.expiresAt <= new Date().toISOString()) return;
   const filename = text(item.filename, 120) || 'phone-photo';
@@ -179,12 +180,13 @@ async function processImage(id, context, deps = {}) {
   }
 }
 
-async function publishImage(id, context, deps = {}) {
+async function publishImage(id, context, deps = {}, attemptId = '') {
   const table = deps.table || getTable();
   const blob = deps.blobService || getBlobService();
   const inbox = blob.getContainerClient(process.env.CATALOG_INTAKE_CONTAINER || 'contribution-inbox');
   const publicContainer = blob.getContainerClient(process.env.CATALOG_PUBLIC_CONTAINER || 'contributions');
   const item = await table.getEntity(PARTITION, id);
+  if (item.activeAttemptId ? item.activeAttemptId !== attemptId : Boolean(attemptId)) return;
   if (item.status === 'published' || item.status === 'hidden') return;
   if (item.status !== 'publishing') throw new Error('Contribution is not awaiting publication.');
   const record = JSON.parse(item.catalogJson || '{}');
@@ -203,7 +205,7 @@ async function publishImage(id, context, deps = {}) {
     if (sha256(photoBytes) !== item.publicSha256 || sha256(thumbBytes) !== item.thumbnailSha256) throw new Error('Published image content hash verification failed.');
     record.image = `Contributions/${photoName}`;
     record.thumb = `Contributions/${thumbName}`;
-    await updateEntity(table, id, {status: 'published', catalogJson: JSON.stringify(record), publishedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), draftTokenHash: ''});
+    await updateEntity(table, id, {status: 'published', catalogJson: JSON.stringify(record), publishedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), draftTokenHash: '', activeAttemptId: ''});
     await deletePrivateBlobs(inbox, id);
   } catch (error) {
     await updateEntity(table, id, {status: 'publishing', updatedAt: new Date().toISOString(), lastError: text(error.message, 500)}).catch(() => {});
@@ -247,18 +249,23 @@ async function expireDrafts(context, deps = {}) {
 
 async function handleCatalogQueue(queueItem, context, deps = {}) {
   const job = itemId(queueItem);
-  if (job.type === 'process') return processImage(job.id, context, deps);
-  if (job.type === 'publish') return publishImage(job.id, context, deps);
+  if (job.type === 'process') return processImage(job.id, context, deps, job.attemptId);
+  if (job.type === 'publish') return publishImage(job.id, context, deps, job.attemptId);
   return removePublishedImage(job.id, deps);
 }
 
 async function handlePoisonQueue(queueItem, context, deps = {}) {
-  const job = typeof queueItem === 'string' ? JSON.parse(queueItem) : queueItem;
-  if (!job || !/^[a-f0-9]{64}$/i.test(job.id || '')) return;
+  let job;
+  try { job = typeof queueItem === 'string' ? JSON.parse(queueItem) : queueItem; }
+  catch { context.error('Ignoring an invalid catalog poison message.'); return; }
+  if (!job || !['process', 'publish'].includes(job.type) || !/^[a-f0-9]{64}$/i.test(job.id || '') || (job.attemptId !== undefined && !/^[a-f0-9]{32}$/i.test(job.attemptId))) return;
   const table = deps.table || getTable();
   try {
     const item = await table.getEntity(PARTITION, job.id.toLowerCase());
-    if (['published', 'hidden'].includes(item.status)) return;
+    const attemptId = job.attemptId?.toLowerCase() || '';
+    if (item.activeAttemptId ? item.activeAttemptId !== attemptId : Boolean(attemptId)) return;
+    if (job.type === 'process' && !['queued', 'processing'].includes(item.status)) return;
+    if (job.type === 'publish' && item.status !== 'publishing') return;
     await updateEntity(table, item.rowKey, {status: 'failed', retryAction: job.type === 'publish' ? 'publish' : 'process', updatedAt: new Date().toISOString(), lastError: 'Processing stopped after repeated attempts. Retry this upload.'});
   } catch (error) { context.error('Could not record a failed catalog queue item.', error.code || error.statusCode || 'unclassified'); }
 }

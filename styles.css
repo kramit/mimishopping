@@ -243,6 +243,5 @@ footer { padding: 28px 18px; color: #738077; font-size: .73rem; text-align: cent
   .chip { padding: 4px 6px; font-size: .63rem; }
   .product-card > img { height: 145px; }
 }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
-@media (prefers-reduced-motion: reduce) { .contribution-activity span { animation: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } .contribution-activity span { animation: none; } }
 :root {

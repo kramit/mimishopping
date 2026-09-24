@@ -151,8 +151,9 @@ async function createIntake(request, context, deps = {}) {
       return json(202, {id, token, status: existing.status, duplicate: true});
     }
     try {
-      await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'queued', updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'});
-      await sendJob(queue, {type: 'process', id});
+      const attemptId = randomBytes(16).toString('hex');
+      await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'queued', activeAttemptId: attemptId, updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'});
+      await sendJob(queue, {type: 'process', id, attemptId});
       return json(202, {id, token, status: 'queued', duplicate: true});
     } catch (error) {
       await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'queue-failed', updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'}).catch(() => {});
@@ -182,8 +183,9 @@ async function createIntake(request, context, deps = {}) {
     return json(503, {id, token, status: 'upload-failed', error: 'The photo was not fully received. Choose it again to retry.'});
   }
   try {
-    await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'queued', updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'});
-    await sendJob(queue, {type: 'process', id});
+    const attemptId = randomBytes(16).toString('hex');
+    await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'queued', activeAttemptId: attemptId, updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'});
+    await sendJob(queue, {type: 'process', id, attemptId});
     return json(202, {id, token, status: 'queued', duplicate: false});
   } catch (error) {
     await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'queue-failed', updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'}).catch(() => {});
@@ -237,9 +239,10 @@ async function retryIntake(request, context, deps = {}) {
     if (!item || !tokenMatches(item, draftToken(request))) return json(404, {error: 'This private upload is unavailable.'});
     if (!['queue-failed', 'failed'].includes(item.status)) return json(409, {error: 'This upload is not ready to retry.'});
     const action = item.retryAction === 'publish' ? 'publish' : 'process';
+    const attemptId = randomBytes(16).toString('hex');
     const retryStatus = action === 'publish' ? 'publishing' : 'queued';
-    await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: retryStatus, retryAction: '', lastError: '', updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'});
-    try { await sendJob(queue, {type: action, id}); }
+    await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: retryStatus, activeAttemptId: attemptId, retryAction: '', lastError: '', updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'});
+    try { await sendJob(queue, {type: action, id, attemptId}); }
     catch (error) {
       await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'failed', retryAction: action, lastError: 'Retry could not be queued. Try again shortly.', updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'}).catch(() => {});
       throw error;
@@ -265,8 +268,9 @@ async function publishIntake(request, context, deps = {}) {
     if (item.status !== 'ready' && item.status !== 'publishing') return json(409, {error: 'Wait until the complete result is ready before adding it.'});
     const currentRecord = JSON.parse(item.catalogJson || '{}');
     const {record, uploaderName} = normalizeSubmission(body, currentRecord, id);
-    await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'publishing', catalogJson: JSON.stringify(record), uploaderName, updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'});
-    try { await sendJob(queue, {type: 'publish', id}); }
+    const attemptId = randomBytes(16).toString('hex');
+    await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'publishing', activeAttemptId: attemptId, catalogJson: JSON.stringify(record), uploaderName, updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'});
+    try { await sendJob(queue, {type: 'publish', id, attemptId}); }
     catch (error) {
       await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'failed', retryAction: 'publish', lastError: 'Publication could not be queued. Choose Retry to continue.', updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'}).catch(() => {});
       throw error;

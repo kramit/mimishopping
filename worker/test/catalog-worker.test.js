@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const {createHash} = require('node:crypto');
 const sharp = require('sharp');
 const hostConfig = require('../host.json');
-const {normalizeAgentResult, normalizeWebResearch, responseText, itemId, processImage, publishImage, expireDrafts, normalizeImages} = require('../src/catalog-worker');
+const {normalizeAgentResult, normalizeWebResearch, responseText, itemId, processImage, publishImage, expireDrafts, normalizeImages, handlePoisonQueue} = require('../src/catalog-worker');
 
 function sha(value) { return createHash('sha256').update(value).digest('hex'); }
 function makeTable(initial = []) {
@@ -66,6 +66,20 @@ test('Responses output parsing and queue message validation handle supported pay
 test('Functions reads raw JSON messages sent by the Azure Queue SDK', () => {
   assert.equal(hostConfig.extensions.queues.messageEncoding, 'none');
   assert.deepEqual(itemId(JSON.stringify({type: 'process', id: 'a'.repeat(64)})), {type: 'process', id: 'a'.repeat(64)});
+});
+
+test('stale poison messages cannot fail a newer attempt or replace a ready result', async () => {
+  const readyId = '5'.repeat(64), queuedId = '6'.repeat(64), attemptId = 'c'.repeat(32);
+  const table = makeTable([
+    {partitionKey: 'catalog', rowKey: readyId, status: 'ready', activeAttemptId: attemptId},
+    {partitionKey: 'catalog', rowKey: queuedId, status: 'queued', activeAttemptId: attemptId}
+  ]);
+  await handlePoisonQueue(JSON.stringify({type: 'process', id: readyId, attemptId: 'a'.repeat(32)}), context, {table});
+  await handlePoisonQueue(JSON.stringify({type: 'process', id: queuedId, attemptId: 'b'.repeat(32)}), context, {table});
+  assert.equal(table.rows.get(readyId).status, 'ready');
+  assert.equal(table.rows.get(queuedId).status, 'queued');
+  await handlePoisonQueue(JSON.stringify({type: 'process', id: queuedId, attemptId}), context, {table});
+  assert.equal(table.rows.get(queuedId).status, 'failed');
 });
 
 test('processing strips photo metadata and publication verifies actual blob hashes', async () => {

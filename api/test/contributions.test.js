@@ -54,6 +54,8 @@ test('anonymous intake stores the image privately and returns a token-gated draf
   assert.equal(response.jsonBody.id, hash(png));
   assert.match(response.jsonBody.token, /^[a-f0-9]{64}$/);
   assert.equal(queue.messages[0].type, 'process');
+  assert.match(queue.messages[0].attemptId, /^[a-f0-9]{32}$/);
+  assert.equal(table.rows.get(hash(png)).activeAttemptId, queue.messages[0].attemptId);
   assert.deepEqual([...inbox.uploads.keys()], [`${hash(png)}/source.png`]);
   assert.equal(table.rows.get(hash(png)).status, 'queued');
   const privateResult = await getIntake(request({params: {id: hash(png)}}), context(), {table});
@@ -123,7 +125,11 @@ test('retry marks the intended action before enqueueing and preserves it after e
   }};
   const response = await retryIntake(request({params: {id}, headers: {'x-catalog-draft-token': token}}), context(), {table, queue});
   assert.equal(response.status, 202);
-  assert.deepEqual(queue.messages, [{type: 'publish', id}]);
+  assert.equal(queue.messages.length, 1);
+  assert.equal(queue.messages[0].type, 'publish');
+  assert.equal(queue.messages[0].id, id);
+  assert.match(queue.messages[0].attemptId, /^[a-f0-9]{32}$/);
+  assert.equal(table.rows.get(id).activeAttemptId, queue.messages[0].attemptId);
 
   Object.assign(table.rows.get(id), {status: 'failed', retryAction: 'publish'});
   const failingQueue = {async sendMessage() { throw new Error('queue unavailable'); }};
