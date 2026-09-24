@@ -6,7 +6,8 @@
   <meta name="theme-color" content="#173d42">
   <meta name="description" content="Mimi's Shopping Encyclopedia — a public catalog of products and finds from trips to Japan.">
   <title>Mimi's Shopping Encyclopedia</title>
-  <link rel="preload" as="image" href="assets/mimi-encyclopedia-hero.webp" fetchpriority="high">
+  <link rel="preload" as="image" href="assets/mimi-encyclopedia-hero-animated.webp" media="(prefers-reduced-motion: no-preference)" fetchpriority="high">
+  <link rel="preload" as="image" href="assets/mimi-encyclopedia-hero-still.webp" media="(prefers-reduced-motion: reduce)" fetchpriority="high">
   <link rel="stylesheet" href="styles.css">
   <script src="assets-config.js"></script>
   <script src="catalog-data.js"></script>
@@ -17,10 +18,7 @@
   <header class="hero">
     <div class="hero-inner">
       <p class="eyebrow"><span aria-hidden="true">日本の旅 · 旅先の買いもの</span> <span>JAPAN TRAVEL FINDS</span></p>
-      <div class="hero-brand">
-        <img class="hero-brand-logo" src="assets/mimi-cat-logo.webp" alt="" aria-hidden="true">
-        <h1>Mimi's Shopping Encyclopedia</h1>
-      </div>
+      <h1>Mimi's Shopping Encyclopedia</h1>
       <p id="summary" class="summary">Loading catalog…</p>
     </div>
   </header>
