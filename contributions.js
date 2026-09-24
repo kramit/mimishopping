@@ -25,13 +25,27 @@
   let previewUrl = '';
   let refreshTimer = 0;
   let refreshing = false;
+  let activityTimer = 0;
+  let activityFrame = 0;
   const pollingIds = new Set();
+  const activityFrames = [...activity.querySelectorAll('.inspection-frame')];
 
   function setStatus(message, reveal = false) {
     status.textContent = message;
     if (reveal) status.scrollIntoView({block: 'nearest', behavior: 'smooth'});
   }
-  function setActivity(active) { activity.hidden = !active; }
+  function showActivityFrame(index) {
+    activityFrame = index;
+    activityFrames.forEach((frame, frameIndex) => frame.classList.toggle('is-active', frameIndex === index));
+  }
+  function setActivity(active) {
+    activity.hidden = !active;
+    clearInterval(activityTimer); activityTimer = 0;
+    showActivityFrame(0);
+    if (active && activityFrames.length > 1 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      activityTimer = window.setInterval(() => showActivityFrame((activityFrame + 1) % activityFrames.length), 4000);
+    }
+  }
   function parseTags(value) {
     const seen = new Set();
     return String(value || '').split(/[\n,;]/).map(tag => tag.trim().replace(/\s+/g, ' ').slice(0, 64)).filter(tag => {

@@ -51,14 +51,29 @@ main { max-width: 1320px; margin: auto; padding: 25px 24px 40px; }
 .contribution-privacy { margin: 0; color: var(--muted); font-size: .72rem; }
 .contribution-flow { display: grid; grid-template-columns: minmax(0,.8fr) minmax(280px,1.2fr); gap: 12px 18px; padding-top: 12px; border-top: 1px solid var(--line); }
 .contribution-status { grid-column: 1 / -1; min-height: 1.3em; margin: 0; color: #315f55; font-size: .83rem; font-weight: 700; }
-.contribution-activity { grid-column: 1 / -1; display: flex; min-height: 38px; align-items: center; justify-content: center; gap: clamp(12px, 5vw, 28px); overflow: hidden; color: #42695d; font-size: 1.5rem; }
-.contribution-activity span { display: inline-block; animation: mimi-activity-bob 1.1s ease-in-out infinite; }
-.contribution-activity span:nth-child(2) { animation-delay: .12s; }
-.contribution-activity span:nth-child(3) { animation-delay: .24s; }
-.contribution-activity span:nth-child(4) { animation-delay: .36s; }
-.contribution-activity span:nth-child(5) { animation-delay: .48s; }
+.contribution-activity { grid-column: 1 / -1; min-width: 0; overflow: hidden; }
 .contribution-activity[hidden] { display: none; }
-@keyframes mimi-activity-bob { 0%, 60%, 100% { opacity: .45; transform: translateY(2px) scale(.94); } 30% { opacity: 1; transform: translateY(-5px) scale(1.08); } }
+.contribution-research-scene { position: relative; width: min(100%, 600px); aspect-ratio: 2 / 1; margin: 0 auto; overflow: hidden; border: 1px solid #d7cfb8; border-radius: 12px; background: #f1ead5; box-shadow: 0 6px 18px #30413b0c; image-rendering: pixelated; }
+.inspection-frame { position: absolute; inset: 0; opacity: 0; background: url("assets/contribution-research-six-frame.webp") no-repeat; background-size: 300% 200%; transition: opacity 1000ms linear; }
+.inspection-frame.is-active { opacity: 1; }
+.inspection-frame-one { background-position: 0% 0%; }
+.inspection-frame-two { background-position: 50% 0%; }
+.inspection-frame-three { background-position: 100% 0%; }
+.inspection-frame-four { background-position: 0% 100%; }
+.inspection-frame-five { background-position: 50% 100%; }
+.inspection-frame-six { background-position: 100% 100%; }
+.inspection-frame-seven, .inspection-frame-eight, .inspection-frame-nine,
+.inspection-frame-ten, .inspection-frame-eleven, .inspection-frame-twelve { background-image: url("assets/contribution-research-six-frame-extra.webp"); }
+.inspection-frame-seven { background-position: 0% 0%; }
+.inspection-frame-eight { background-position: 50% 0%; }
+.inspection-frame-nine { background-position: 100% 0%; }
+.inspection-frame-ten { background-position: 0% 100%; }
+.inspection-frame-eleven { background-position: 50% 100%; }
+.inspection-frame-twelve { background-position: 100% 100%; }
+.contribution-activity-caption { display: flex; min-height: 25px; align-items: center; justify-content: center; gap: 9px; padding-top: 6px; color: #315f55; font-size: .76rem; }
+.contribution-progress-bar { position: relative; display: inline-block; width: 36px; height: 5px; overflow: hidden; border-radius: 999px; background: #dce5d9; }
+.contribution-progress-bar::after { position: absolute; inset: 0 auto 0 -45%; width: 45%; border-radius: inherit; background: #bc7054; content: ""; animation: contribution-progress-slide 1.25s cubic-bezier(.45,0,.55,1) infinite; }
+@keyframes contribution-progress-slide { to { transform: translateX(320%); } }
 .contribution-drafts { grid-column: 1 / -1; display: grid; gap: 8px; }
 .contribution-draft { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid #e4dfd1; border-radius: 9px; background: #fffefa; }
 .contribution-draft-info { display: grid; min-width: 0; gap: 3px; }
@@ -270,5 +285,5 @@ footer { padding: 28px 18px; color: #738077; font-size: .73rem; text-align: cent
   .chip { padding: 4px 6px; font-size: .63rem; }
   .product-card > picture img { height: 145px; }
 }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } .contribution-activity span { animation: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } .inspection-frame { display: none; } .contribution-research-scene::before { position: absolute; inset: 0; background: url("assets/contribution-research-six-frame.webp") no-repeat 0 0 / 300% 200%; content: ""; } .contribution-progress-bar::after { left: 28%; width: 44%; animation: none; } }
 :root {
