@@ -86,7 +86,9 @@ function normalizeSubmission(input, currentRecord, id) {
   const tags = normalizeTags([...proposedTags.filter(tag => !/^contributor\s*:/i.test(tag)), contributorTag]);
   const record = {...currentRecord, id, category, tags, uploadedBy: name, isContribution: true,
     trip: 'Community contributions', reviewStatus: currentRecord.confidence === 'low' ? 'needs human review' : 'cataloged',
-    image: `Contributions/photos/${id}.jpg`, thumb: `Contributions/thumbnails/${id}.jpg`};
+    image: `Contributions/photos/${id}.jpg`, download: `Contributions/photos/${id}.jpg`, downloadFilename: `${id}.jpg`,
+    thumb: `Contributions/optimized-v1/thumbnails/${id}.jpg`, thumbWebp: `Contributions/optimized-v1/thumbnails/${id}.webp`,
+    display: `Contributions/optimized-v1/display/${id}.jpg`, displayWebp: `Contributions/optimized-v1/display/${id}.webp`};
   return {record, uploaderName: name};
 }
 

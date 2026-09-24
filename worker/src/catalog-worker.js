@@ -88,7 +88,9 @@ function normalizeAgentResult(raw, {id, filename, now = new Date()} = {}) {
     products, japaneseText, description: text(raw?.description) || 'Community-submitted product photo.',
     confidence, evidence: text(raw?.evidence), notes: text(raw?.notes),
     reviewStatus: confidence === 'low' || products.length === 0 ? 'needs human review' : confidence === 'medium' ? 'needs closer inspection' : 'cataloged',
-    image: `Contributions/photos/${id}.jpg`, thumb: `Contributions/thumbnails/${id}.jpg`, isContribution: true
+    image: `Contributions/photos/${id}.jpg`, download: `Contributions/photos/${id}.jpg`, downloadFilename: `${id}.jpg`,
+    thumb: `Contributions/optimized-v1/thumbnails/${id}.jpg`, thumbWebp: `Contributions/optimized-v1/thumbnails/${id}.webp`,
+    display: `Contributions/optimized-v1/display/${id}.jpg`, displayWebp: `Contributions/optimized-v1/display/${id}.webp`, isContribution: true
   };
   if (Buffer.byteLength(JSON.stringify(record), 'utf8') > MAX_JSON_BYTES) throw new Error('Structured product research exceeded the catalog record size limit.');
   return record;
@@ -135,8 +137,15 @@ async function normalizeImages(source) {
     .resize({width: 2600, height: 2600, fit: 'inside', withoutEnlargement: true})
     .jpeg({quality: 88, mozjpeg: true}).toBuffer();
   const preview = await sharp(publicJpeg).resize({width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true}).jpeg({quality: 82}).toBuffer();
-  const thumbnail = await sharp(publicJpeg).resize({width: 520, height: 520, fit: 'inside', withoutEnlargement: true}).jpeg({quality: 80}).toBuffer();
-  return {metadata, publicJpeg, preview, thumbnail, publicSha256: sha256(publicJpeg), thumbSha256: sha256(thumbnail)};
+  const thumbBase = sharp(publicJpeg).resize({width: 480, height: 480, fit: 'inside', withoutEnlargement: true});
+  const thumbnail = await thumbBase.clone().jpeg({quality: 82, mozjpeg: true}).toBuffer();
+  const thumbnailWebp = await thumbBase.clone().webp({quality: 78, effort: 4}).toBuffer();
+  const displayBase = sharp(publicJpeg).resize({width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true});
+  const display = await displayBase.clone().jpeg({quality: 82, mozjpeg: true}).toBuffer();
+  const displayWebp = await displayBase.clone().webp({quality: 80, effort: 4}).toBuffer();
+  return {metadata, publicJpeg, preview, thumbnail, thumbnailWebp, display, displayWebp,
+    publicSha256: sha256(publicJpeg), thumbSha256: sha256(thumbnail), thumbWebpSha256: sha256(thumbnailWebp),
+    displaySha256: sha256(display), displayWebpSha256: sha256(displayWebp)};
 }
 
 function itemId(queueItem) {
@@ -166,12 +175,20 @@ async function processImage(id, context, deps = {}, attemptId = '') {
     const previewBlob = `${id}/preview.jpg`;
     const safeBlob = `${id}/publish.jpg`;
     const thumbBlob = `${id}/thumb.jpg`;
+    const thumbWebpBlob = `${id}/thumb.webp`;
+    const displayBlob = `${id}/display.jpg`;
+    const displayWebpBlob = `${id}/display.webp`;
     const privateOptions = {blobHTTPHeaders: {blobContentType: 'image/jpeg', blobCacheControl: 'no-store'}};
     await inbox.getBlockBlobClient(previewBlob).uploadData(outputs.preview, {...privateOptions, metadata: {sha256: sha256(outputs.preview)}});
     await inbox.getBlockBlobClient(safeBlob).uploadData(outputs.publicJpeg, {...privateOptions, metadata: {sha256: outputs.publicSha256}});
     await inbox.getBlockBlobClient(thumbBlob).uploadData(outputs.thumbnail, {...privateOptions, metadata: {sha256: outputs.thumbSha256}});
+    await inbox.getBlockBlobClient(thumbWebpBlob).uploadData(outputs.thumbnailWebp, {blobHTTPHeaders: {...privateOptions.blobHTTPHeaders, blobContentType: 'image/webp'}, metadata: {sha256: outputs.thumbWebpSha256}});
+    await inbox.getBlockBlobClient(displayBlob).uploadData(outputs.display, {...privateOptions, metadata: {sha256: outputs.displaySha256}});
+    await inbox.getBlockBlobClient(displayWebpBlob).uploadData(outputs.displayWebp, {blobHTTPHeaders: {...privateOptions.blobHTTPHeaders, blobContentType: 'image/webp'}, metadata: {sha256: outputs.displayWebpSha256}});
     await updateEntity(table, id, {status: 'ready', catalogJson: JSON.stringify(record), previewBlob, publicBlob: safeBlob,
-      thumbnailBlob: thumbBlob, publicSha256: outputs.publicSha256, thumbnailSha256: outputs.thumbSha256,
+      thumbnailBlob: thumbBlob, thumbnailWebpBlob: thumbWebpBlob, displayBlob, displayWebpBlob,
+      publicSha256: outputs.publicSha256, thumbnailSha256: outputs.thumbSha256, thumbnailWebpSha256: outputs.thumbWebpSha256,
+      displaySha256: outputs.displaySha256, displayWebpSha256: outputs.displayWebpSha256,
       imageWidth: outputs.metadata.width || 0, imageHeight: outputs.metadata.height || 0,
       updatedAt: new Date().toISOString(), lastError: ''});
   } catch (error) {
@@ -191,20 +208,42 @@ async function publishImage(id, context, deps = {}, attemptId = '') {
   if (item.status !== 'publishing') throw new Error('Contribution is not awaiting publication.');
   const record = JSON.parse(item.catalogJson || '{}');
   const photoName = `photos/${id}.jpg`;
-  const thumbName = `thumbnails/${id}.jpg`;
+  const thumbName = `optimized-v1/thumbnails/${id}.jpg`;
+  const thumbWebpName = `optimized-v1/thumbnails/${id}.webp`;
+  const displayName = `optimized-v1/display/${id}.jpg`;
+  const displayWebpName = `optimized-v1/display/${id}.webp`;
   const publicBlob = publicContainer.getBlockBlobClient(photoName);
   const thumbBlob = publicContainer.getBlockBlobClient(thumbName);
+  const thumbWebpBlob = publicContainer.getBlockBlobClient(thumbWebpName);
+  const displayBlob = publicContainer.getBlockBlobClient(displayName);
+  const displayWebpBlob = publicContainer.getBlockBlobClient(displayWebpName);
   try {
     const source = await inbox.getBlobClient(item.publicBlob).downloadToBuffer();
     const thumbnail = await inbox.getBlobClient(item.thumbnailBlob).downloadToBuffer();
-    await publicBlob.uploadData(source, {blobHTTPHeaders: {blobContentType: 'image/jpeg', blobCacheControl: 'public, max-age=31536000, immutable'}, metadata: {sha256: item.publicSha256}});
-    await thumbBlob.uploadData(thumbnail, {blobHTTPHeaders: {blobContentType: 'image/jpeg', blobCacheControl: 'public, max-age=31536000, immutable'}, metadata: {sha256: item.thumbnailSha256}});
-    const [photoProperties, thumbProperties] = await Promise.all([publicBlob.getProperties(), thumbBlob.getProperties()]);
-    if (photoProperties.metadata?.sha256 !== item.publicSha256 || thumbProperties.metadata?.sha256 !== item.thumbnailSha256) throw new Error('Published image verification failed.');
-    const [photoBytes, thumbBytes] = await Promise.all([publicBlob.downloadToBuffer(), thumbBlob.downloadToBuffer()]);
-    if (sha256(photoBytes) !== item.publicSha256 || sha256(thumbBytes) !== item.thumbnailSha256) throw new Error('Published image content hash verification failed.');
+    const outputs = [
+      [thumbBlob, item.thumbnailBlob, item.thumbnailSha256, 'image/jpeg', 'thumb'],
+      [thumbWebpBlob, item.thumbnailWebpBlob, item.thumbnailWebpSha256, 'image/webp', 'thumb webp'],
+      [displayBlob, item.displayBlob, item.displaySha256, 'image/jpeg', 'display'],
+      [displayWebpBlob, item.displayWebpBlob, item.displayWebpSha256, 'image/webp', 'display webp'],
+    ];
+    await publicBlob.uploadData(source, {blobHTTPHeaders: {blobContentType: 'image/jpeg', blobContentDisposition: `attachment; filename="${id}.jpg"`, blobCacheControl: 'public, max-age=31536000, immutable'}, metadata: {sha256: item.publicSha256}});
+    for (const [target, privateName, digest, mime] of outputs) {
+      const bytes = await inbox.getBlobClient(privateName).downloadToBuffer();
+      await target.uploadData(bytes, {blobHTTPHeaders: {blobContentType: mime, blobCacheControl: 'public, max-age=31536000, immutable'}, metadata: {sha256: digest}});
+    }
+    const all = [publicBlob, ...outputs.map(([target]) => target)];
+    const props = await Promise.all(all.map(target => target.getProperties()));
+    const buffers = await Promise.all(all.map(target => target.downloadToBuffer()));
+    const expectedHashes = [item.publicSha256, ...outputs.map(([, , digest]) => digest)];
+    if (props.some((value, index) => value.metadata?.sha256 !== expectedHashes[index])) throw new Error('Published image verification failed.');
+    if (buffers.some((value, index) => sha256(value) !== expectedHashes[index])) throw new Error('Published image content hash verification failed.');
     record.image = `Contributions/${photoName}`;
+    record.download = `Contributions/${photoName}`;
+    record.downloadFilename = `${id}.jpg`;
     record.thumb = `Contributions/${thumbName}`;
+    record.thumbWebp = `Contributions/${thumbWebpName}`;
+    record.display = `Contributions/${displayName}`;
+    record.displayWebp = `Contributions/${displayWebpName}`;
     await updateEntity(table, id, {status: 'published', catalogJson: JSON.stringify(record), publishedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), draftTokenHash: '', activeAttemptId: ''});
     await deletePrivateBlobs(inbox, id);
   } catch (error) {
@@ -215,7 +254,7 @@ async function publishImage(id, context, deps = {}, attemptId = '') {
 }
 
 async function deletePrivateBlobs(container, id) {
-  const names = [`${id}/source.jpg`, `${id}/source.png`, `${id}/source.webp`, `${id}/source.heic`, `${id}/source.avif`, `${id}/preview.jpg`, `${id}/publish.jpg`, `${id}/thumb.jpg`];
+  const names = [`${id}/source.jpg`, `${id}/source.png`, `${id}/source.webp`, `${id}/source.heic`, `${id}/source.avif`, `${id}/preview.jpg`, `${id}/publish.jpg`, `${id}/thumb.jpg`, `${id}/thumb.webp`, `${id}/display.jpg`, `${id}/display.webp`];
   await Promise.all(names.map(name => container.deleteBlob(name).catch(error => { if (error.statusCode !== 404) throw error; })));
 }
 
@@ -226,7 +265,7 @@ async function removePublishedImage(id, deps = {}) {
   const item = await table.getEntity(PARTITION, id);
   await Promise.all([
     publicContainer.deleteBlob(`photos/${id}.jpg`).catch(error => { if (error.statusCode !== 404) throw error; }),
-    publicContainer.deleteBlob(`thumbnails/${id}.jpg`).catch(error => { if (error.statusCode !== 404) throw error; })
+    ...[`thumbnails/${id}.jpg`, `optimized-v1/thumbnails/${id}.jpg`, `optimized-v1/thumbnails/${id}.webp`, `optimized-v1/display/${id}.jpg`, `optimized-v1/display/${id}.webp`].map(name => publicContainer.deleteBlob(name).catch(error => { if (error.statusCode !== 404) throw error; }))
   ]);
   await deletePrivateBlobs(blob.getContainerClient(process.env.CATALOG_INTAKE_CONTAINER || 'contribution-inbox'), id);
   if (item.status !== 'hidden') await updateEntity(table, id, {status: 'hidden', updatedAt: new Date().toISOString()});

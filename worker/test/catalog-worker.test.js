@@ -30,7 +30,7 @@ function makeBlobService(initial = {}) {
     }
     getBlockBlobClient(name) {
       const container = this;
-      return {async uploadData(bytes, options = {}) { container.blobs.set(name, {bytes: Buffer.from(bytes), metadata: {...(options.metadata || {})}}); },
+      return {async uploadData(bytes, options = {}) { container.blobs.set(name, {bytes: Buffer.from(bytes), metadata: {...(options.metadata || {})}, httpHeaders: {...(options.blobHTTPHeaders || {})}}); },
         async downloadToBuffer() { const blob = container.blobs.get(name); if (!blob) { const error = new Error('missing'); error.statusCode = 404; throw error; } return Buffer.from(blob.bytes); },
         async getProperties() { const blob = container.blobs.get(name); if (!blob) { const error = new Error('missing'); error.statusCode = 404; throw error; } return {metadata: {...blob.metadata}}; }};
     }
@@ -100,7 +100,12 @@ test('processing strips photo metadata and publication verifies actual blob hash
   assert.equal(table.rows.get(id).draftTokenHash, '');
   const publicBlobs = blobService.getContainerClient('contributions').blobs;
   assert.equal(sha(publicBlobs.get(`photos/${id}.jpg`).bytes), table.rows.get(id).publicSha256);
-  assert.equal(sha(publicBlobs.get(`thumbnails/${id}.jpg`).bytes), table.rows.get(id).thumbnailSha256);
+  assert.equal(publicBlobs.get(`photos/${id}.jpg`).httpHeaders.blobContentDisposition, `attachment; filename="${id}.jpg"`);
+  assert.equal(sha(publicBlobs.get(`optimized-v1/thumbnails/${id}.jpg`).bytes), table.rows.get(id).thumbnailSha256);
+  assert.equal(sha(publicBlobs.get(`optimized-v1/thumbnails/${id}.webp`).bytes), table.rows.get(id).thumbnailWebpSha256);
+  assert.equal(sha(publicBlobs.get(`optimized-v1/display/${id}.jpg`).bytes), table.rows.get(id).displaySha256);
+  assert.equal(sha(publicBlobs.get(`optimized-v1/display/${id}.webp`).bytes), table.rows.get(id).displayWebpSha256);
+  assert.equal(JSON.parse(table.rows.get(id).catalogJson).downloadFilename, `${id}.jpg`);
   assert.equal(blobService.getContainerClient('contribution-inbox').blobs.size, 0);
 });
 
@@ -112,7 +117,7 @@ test('expired private drafts and hidden published images are physically removed'
   ]);
   const blobService = makeBlobService({
     'contribution-inbox': {[`${draftId}/source.jpg`]: {bytes: Buffer.from('private')}, [`${hiddenId}/source.jpg`]: {bytes: Buffer.from('private')}},
-    contributions: {[`photos/${hiddenId}.jpg`]: {bytes: Buffer.from('public')}, [`thumbnails/${hiddenId}.jpg`]: {bytes: Buffer.from('thumb')}}
+    contributions: {[`photos/${hiddenId}.jpg`]: {bytes: Buffer.from('public')}, [`thumbnails/${hiddenId}.jpg`]: {bytes: Buffer.from('thumb')}, [`optimized-v1/display/${hiddenId}.webp`]: {bytes: Buffer.from('webp')}}
   });
   await expireDrafts(context, {table, blobService});
   assert.equal(table.rows.size, 0);
@@ -125,4 +130,7 @@ test('generated previews are JPEGs suitable for browser display', async () => {
   const outputs = await normalizeImages(source);
   assert.equal((await sharp(outputs.preview).metadata()).format, 'jpeg');
   assert.equal((await sharp(outputs.thumbnail).metadata()).format, 'jpeg');
+  assert.equal((await sharp(outputs.thumbnailWebp).metadata()).format, 'webp');
+  assert.equal((await sharp(outputs.display).metadata()).format, 'jpeg');
+  assert.equal((await sharp(outputs.displayWebp).metadata()).format, 'webp');
 });

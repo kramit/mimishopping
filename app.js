@@ -48,12 +48,37 @@
     const raw = String(path || '');
     if (/^https?:\/\//i.test(raw)) return raw;
     const relative = raw.replace(/^(\.\.\/)+/, '');
-    const mappings = [['Photos/', 'photos/', window.MIMI_ASSET_BASE], ['Catalog/thumbnails/', 'thumbnails/', window.MIMI_ASSET_BASE], ['Catalog/previews/', 'previews/', window.MIMI_ASSET_BASE], ['Contributions/', '', window.MIMI_CONTRIBUTION_ASSET_BASE]];
+    const mappings = [['Photos/', 'photos/', window.MIMI_ASSET_BASE], ['Catalog/thumbnails/', 'thumbnails/', window.MIMI_ASSET_BASE], ['Catalog/previews/', 'previews/', window.MIMI_ASSET_BASE], ['Catalog/optimized-v1/', 'optimized-v1/', window.MIMI_ASSET_BASE], ['Contributions/', '', window.MIMI_CONTRIBUTION_ASSET_BASE]];
     const mapping = mappings.find(([prefix]) => relative.startsWith(prefix));
     const base = String(mapping?.[2] || '').replace(/\/+$/, '');
     if (!base || !mapping) return raw;
     const objectPath = mapping[1] + relative.slice(mapping[0].length);
     return `${base}/${objectPath.split('/').map(encodeURIComponent).join('/')}`;
+  }
+  function responsiveImage(image, variant, alt, className = '') {
+    const prefix = variant === 'thumb' ? 'thumb' : 'display';
+    const fallback = assetUrl(image?.[prefix] || image?.image || '');
+    const webp = image?.[`${prefix}Webp`];
+    const picture = document.createElement('picture');
+    if (webp) {
+      const source = document.createElement('source');
+      source.type = 'image/webp'; source.srcset = assetUrl(webp); picture.append(source);
+    }
+    const img = document.createElement('img');
+    img.src = fallback; img.alt = alt || ''; img.decoding = 'async';
+    if (className) img.className = className;
+    picture.append(img);
+    return picture;
+  }
+  function saveImageLink(image) {
+    const path = image?.download || image?.image;
+    if (!path) return null;
+    const link = document.createElement('a');
+    const url = new URL(assetUrl(path), window.location.href);
+    url.searchParams.set('mimi-download', '1');
+    link.href = url.href; link.download = image.downloadFilename || image.filename || 'mimi-japan-shopping-image';
+    link.className = 'button button-primary save-image'; link.textContent = 'Save Image';
+    return link;
   }
   function readReviewChecks() {
     try {
@@ -245,7 +270,7 @@
   }
   function card(x) {
     const el = document.createElement('article'); el.className = 'card'; el.tabIndex = 0; el.setAttribute('role','button');
-    const img = document.createElement('img'); img.src = assetUrl(x.thumb); img.loading = 'lazy'; img.alt = x.description || x.filename;
+    const picture = responsiveImage(x, 'thumb', x.description || x.filename); const img=picture.querySelector('img'); img.loading = 'lazy';
     const body = document.createElement('div'); body.className = 'card-body';
     const title = (x.products||[]).map(p=>p.name).filter(Boolean).slice(0,2).join(' · ') || x.description || 'Catalog review pending';
     const heading = document.createElement('p'); heading.className='card-title'; heading.textContent=title;
@@ -255,11 +280,11 @@
     if (tags.length) {const chips=document.createElement('div');chips.className='chips';tags.slice(0,5).forEach(t=>{const c=document.createElement('span');c.className='chip';c.textContent=t;chips.append(c)});body.append(chips)}
     addResearchBadges(body,imageResearchStatuses(x));
     if (['needs human review','needs closer inspection'].includes(x.reviewStatus)) {const s=document.createElement('div');s.className='status';s.textContent=x.reviewStatus;body.append(s)}
-    el.append(img,body); el.addEventListener('click',()=>openDetail(x)); el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openDetail(x)}}); return el;
+    el.append(picture,body); el.addEventListener('click',()=>openDetail(x)); el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openDetail(x)}}); return el;
   }
   function productCard(group) {
     const el=document.createElement('article');el.className='product-card';
-    const cover=document.createElement('img');cover.src=assetUrl((group.visibleImages[0]||group.images[0]).thumb);cover.loading='lazy';cover.alt=productTitle(group.product);
+    const coverPicture=responsiveImage((group.visibleImages[0]||group.images[0]),'thumb',productTitle(group.product));const cover=coverPicture.querySelector('img');cover.loading='lazy';
     const body=document.createElement('div');body.className='product-card-body';
     const title=document.createElement('h3');title.textContent=productTitle(group.product);
     const meta=document.createElement('p');meta.className='meta';
@@ -271,7 +296,7 @@
     addResearchBadges(body,statuses);
     const action=document.createElement('button');action.type='button';action.className='button button-quiet product-open';action.textContent='View photos and research';
     action.addEventListener('click',()=>openProductDetail(group));
-    el.append(cover,body,action);return el;
+    el.append(coverPicture,body,action);return el;
   }
   function renderReviewQueue() {
     const items=data.images.filter(needsAttention);
@@ -282,11 +307,11 @@
     for(const image of items){
       const row=document.createElement('div');row.className=`review-queue-item${reviewChecks.has(image.id)?' review-checked':''}`;
       const button=document.createElement('button');button.type='button';button.className='review-queue-open';
-      const thumb=document.createElement('img');thumb.src=assetUrl(image.thumb);thumb.loading='lazy';thumb.alt='';
+      const thumbPicture=responsiveImage(image,'thumb','');const thumb=thumbPicture.querySelector('img');thumb.loading='lazy';
       const text=document.createElement('span');text.className='review-queue-text';
       const filename=document.createElement('strong');filename.textContent=image.filename;
       const note=document.createElement('span');note.textContent=`${reviewChecks.has(image.id)?'Checked locally · ':''}${image.reviewStatus}${image.notes?` · ${image.notes}`:''}`;
-      text.append(filename,note);button.append(thumb,text);button.addEventListener('click',()=>openDetail(image));
+      text.append(filename,note);button.append(thumbPicture,text);button.addEventListener('click',()=>openDetail(image));
       const check=document.createElement('button');check.type='button';check.className='button button-quiet review-check-button';
       check.textContent=reviewChecks.has(image.id)?'Undo check':'Mark checked';
       check.setAttribute('aria-label',`${reviewChecks.has(image.id)?'Undo local check for':'Mark checked locally'} ${image.filename}`);
@@ -437,10 +462,11 @@
   function openProductDetail(group) {
     const holder=$('detailContent');holder.replaceChildren();
     const representative=group.images[0];
-    const image=document.createElement('img');image.className='detail-image';image.src=assetUrl(representative?.image||representative?.thumb||'');image.alt=productTitle(group.product);
+    const image=responsiveImage(representative,'display',productTitle(group.product),'detail-image');
     const info=document.createElement('div');info.className='detail-info product-detail-info';
     const h=document.createElement('h2');h.textContent=productTitle(group.product);info.append(h);
     const meta=document.createElement('p');meta.className='detail-meta';meta.textContent=`${group.images.length} related photo${group.images.length===1?'':'s'} · ${unique(group.images.map(x=>x.trip)).join(', ')}`;info.append(meta);
+    const save=saveImageLink(representative);if(save)info.append(save);
     const productSet=new Set();
     for(const photo of group.images)for(const product of photo.products||[]){if(normalizedProductKey(product)===group.key)productSet.add(JSON.stringify(product));}
     const productList=document.createElement('div');productList.className='product-list';
@@ -462,19 +488,20 @@
     const photoGrid=document.createElement('div');photoGrid.className='related-photo-list';
     for(const photo of group.images){
       const button=document.createElement('button');button.type='button';button.className='related-photo';
-      const thumb=document.createElement('img');thumb.src=assetUrl(photo.thumb);thumb.loading='lazy';thumb.alt='';
+      const thumbPicture=responsiveImage(photo,'thumb','');const thumb=thumbPicture.querySelector('img');thumb.loading='lazy';
       const caption=document.createElement('span');caption.textContent=[photo.trip,photo.filename].filter(Boolean).join(' · ');
-      button.append(thumb,caption);button.addEventListener('click',()=>openDetail(photo));photoGrid.append(button);
+      button.append(thumbPicture,caption);button.addEventListener('click',()=>openDetail(photo));photoGrid.append(button);
     }
     info.append(photoGrid);holder.append(image,info);if(!detail.open)detail.showModal();
   }
   function openDetail(x) {
     const holder=$('detailContent'); holder.replaceChildren();
     holder.dataset.imageId=x.id;
-    const image=document.createElement('img'); image.className='detail-image'; image.src=assetUrl(x.image); image.alt=x.description||x.filename;
+    const image=responsiveImage(x,'display',x.description||x.filename,'detail-image');
     const info=document.createElement('div'); info.className='detail-info';
     const h=document.createElement('h2'); h.textContent=(x.products||[]).map(p=>p.name).filter(Boolean).join(' · ')||'Image details'; info.append(h);
     const p=document.createElement('p'); p.className='detail-meta'; p.textContent=[x.trip,x.category,x.uploadedBy?`Contributed by ${x.uploadedBy}`:'',x.filename].filter(Boolean).join(' · '); info.append(p);
+    const save=saveImageLink(x);if(save)info.append(save);
     if(x.description){const d=document.createElement('p');d.textContent=x.description;info.append(d)}
     if(needsAttention(x)){
       const review=document.createElement('section');review.className='review-detail';

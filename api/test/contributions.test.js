@@ -151,6 +151,10 @@ test('submit requires a ready result and contributor name, then adds an attribut
   assert.deepEqual(record.tags, ['skincare', 'Contributor: Mimi']);
   assert.equal(record.uploadedBy, 'Mimi');
   assert.equal(record.image, `Contributions/photos/${id}.jpg`);
+  assert.equal(record.download, `Contributions/photos/${id}.jpg`);
+  assert.equal(record.downloadFilename, `${id}.jpg`);
+  assert.equal(record.thumbWebp, `Contributions/optimized-v1/thumbnails/${id}.webp`);
+  assert.equal(record.displayWebp, `Contributions/optimized-v1/display/${id}.webp`);
   assert.equal(queue.messages.at(-1).type, 'publish');
 });
 
