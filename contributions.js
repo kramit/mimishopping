@@ -19,6 +19,7 @@
   const categoryInput = $('contributionCategory');
   const tagsInput = $('contributionTags');
   const addButton = $('addContribution');
+  const discardButton = $('discardContribution');
   const retryButton = $('retryContribution');
   const drafts = new Map();
   let active = null;
@@ -120,6 +121,7 @@
     result.replaceChildren(); result.hidden = true; form.hidden = true; retryButton.hidden = true;
     publishStatus.hidden = true; publishStatus.textContent = '';
     addButton.disabled = false; addButton.textContent = 'Add to catalog';
+    discardButton.disabled = false;
     nameInput.disabled = false; categoryInput.disabled = false; tagsInput.disabled = false;
   }
   function showFlow() { flow.hidden = false; }
@@ -296,7 +298,7 @@
     if (wasActive) {
       clearResult();
       setPreview('');
-      setActivity(false);
+      syncActivity();
       setStatus('Added to the catalog. It is now the first photo in the collection.');
     }
   }
@@ -305,9 +307,11 @@
     if (active?.id !== draft.id) return;
     draft.result = record;
     renderFullResult(record);
-    setActivity(false);
+    syncActivity();
+    discardButton.disabled = draft.status === 'publishing';
     if(draft.status==='publishing'){
       addButton.disabled=true;addButton.textContent='Publishing…';
+      discardButton.disabled=true;
       nameInput.disabled=true;categoryInput.disabled=true;tagsInput.disabled=true;
       publishStatus.hidden=false;publishStatus.textContent='Your contribution is queued for publishing. You can keep browsing; it will appear at the top of the gallery when ready.';
     }
@@ -354,7 +358,7 @@
           if(item.status==='failed'&&active?.id===saved.id){
             publishStatus.hidden=false;publishStatus.textContent=item.error||'The catalog action needs a retry.';
             retryButton.textContent=item.retryAction==='publish'?'Retry adding to catalog':'Retry analysis';retryButton.hidden=false;
-            addButton.disabled=true;
+            addButton.disabled=true;discardButton.disabled=false;
           }
           if(item.status==='published'){
             const published=await getPublicItem(saved.id,publicPayload);
@@ -392,18 +396,18 @@
           showReadyResult(draft,item.result);await fetchPrivatePreview(draft);scheduleRefresh();return;
         }
         if (['failed', 'upload-failed', 'queue-failed'].includes(item.status)) {
-          setActivity(false);
+          syncActivity();
           retryButton.textContent=item.retryAction==='publish'?'Retry adding to catalog':'Retry analysis';
           retryButton.hidden = false; form.hidden = true;renderDraftList();setStatus(item.error || 'Processing needs a retry. Your photo is still private.');return;
         }
         setStatus(item.status === 'processing' ? 'Identifying the products and researching current product pages…' : 'Photo received. Waiting for analysis…');
         await new Promise(resolve => setTimeout(resolve, 3500));
       }
-      setActivity(false);
+      syncActivity();
       setStatus('Analysis is taking longer than expected. It is still running in the background; check the upload list later.');
       retryButton.hidden = true;
     } catch (error) {
-      setActivity(false);
+      syncActivity();
       setStatus(error.message || 'The private result could not be loaded.');
       retryButton.hidden = true;
     } finally { pollingIds.delete(draft.id);renderDraftList();scheduleRefresh(); }
@@ -430,7 +434,7 @@
       const payload=await parseResponse(await fetch(`/api/intakes/${encodeURIComponent(draft.id)}/retry`,{method:'POST',headers:{'x-catalog-draft-token':draft.token}}));
       saveDraft(draft,{status:payload.status||'queued',error:'',retryAction:''});
       setStatus('Retry queued. Your private upload will continue in the background.');
-      if(active?.id===draft.id){retryButton.hidden=true;if(draft.retryAction==='publish'){publishStatus.hidden=false;publishStatus.textContent='Retry queued. We will place the photo at the top of the gallery after publishing completes.';}}
+      if(active?.id===draft.id){retryButton.hidden=true;if(draft.retryAction==='publish'){discardButton.disabled=true;publishStatus.hidden=false;publishStatus.textContent='Retry queued. We will place the photo at the top of the gallery after publishing completes.';}}
     }catch(error){setStatus(error.message||'Retry could not be queued.');}
   }
 
@@ -478,7 +482,7 @@
 
   async function uploadCameraRoll(files) {
     if(!files.length)return;
-    showFlow();setActivity(false);
+    showFlow();syncActivity();
     let next=0,uploaded=0;const errors=[];
     setStatus(`Uploading ${files.length} photo${files.length===1?'':'s'} privately. AI analysis will run in the background after each upload.`);
     async function uploadWorker(){
@@ -500,21 +504,41 @@
   });
   cameraInput.addEventListener('change',async event=>{
     const file=event.target.files?.[0];event.target.value='';
-    if(file)try{await uploadPhoto(file,{background:false});}catch(error){setActivity(false);setStatus(error.message||'The photo could not be uploaded.');}
+    if(file)try{await uploadPhoto(file,{background:false});}catch(error){syncActivity();setStatus(error.message||'The photo could not be uploaded.');}
   });
 
   $('clearContribution').addEventListener('click',()=>{
-    active=null;clearResult();setPreview('');setActivity(false);
+    active=null;clearResult();setPreview('');syncActivity();
     setStatus('Result closed. Private uploads remain in your list and can be reviewed later.');
   });
 
   retryButton.addEventListener('click',()=>{if(active)retryDraft(active);});
+
+  discardButton.addEventListener('click',async()=>{
+    if(!active?.id||!active?.token)return;
+    const draft=active;
+    if(!window.confirm('Discard this photo and its private analysis? It will not be added to the catalog.'))return;
+    discardButton.disabled=true;
+    setPublishStatus('Discarding the private photo…');
+    try{
+      await parseResponse(await fetch(`/api/intakes/${encodeURIComponent(draft.id)}`,{
+        method:'DELETE',headers:{'x-catalog-draft-token':draft.token}
+      }));
+      const wasActive=active?.id===draft.id;
+      forgetDraft(draft.id);
+      if(wasActive){active=null;clearResult();setPreview('');syncActivity();setStatus('Item discarded. It was not added to the catalog.');}
+    }catch(error){
+      discardButton.disabled=false;
+      setPublishStatus(error.message||'The private photo could not be discarded. Try again.');
+    }
+  });
 
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (!active?.id || !active?.token || !active.result) {setPublishStatus('Wait until the complete identification and research result is ready.',true);return;}
     if (!nameInput.value.trim()) { nameInput.focus(); setPublishStatus('Enter a contributor name before adding this photo.',true);return; }
     addButton.disabled = true;
+    discardButton.disabled = true;
     addButton.textContent='Adding…';
     retryButton.hidden = true;
     setPublishStatus('Sending your contribution to the catalog…',true);
@@ -538,6 +562,7 @@
     } catch (error) {
       setPublishStatus(error.message || 'The contribution could not be added. Try again.');
       addButton.disabled = false;
+      discardButton.disabled = false;
       addButton.textContent='Add to catalog';
     }
   });

@@ -117,6 +117,20 @@ async function createIntake(request, context, deps = {}) {
 
   if (existing?.status === 'published') return json(200, {id, status: 'published', duplicate: true});
   let restartingExpired = false;
+  let restartingDiscarded = false;
+  if (existing?.status === 'discarded') {
+    const previous = existing;
+    existing = {partitionKey: PARTITION, rowKey: id, sha256: id, status: 'receiving',
+      filename: safeFilename(request.headers.get('x-file-name')), sourceMime: format.mime,
+      sourceExtension: format.extension, sourceBlob: `${id}/source.${format.extension}`,
+      draftTokenHash: digest(token), createdAt: now, updatedAt: now, expiresAt: addDays(now, DRAFT_DAYS)};
+    try { await table.updateEntity(existing, 'Replace', {etag: previous.etag || '*'}); }
+    catch (error) {
+      context.error('Discarded catalog intake could not be restarted.', error.code || statusCode(error) || 'unclassified');
+      return json(503, {error: 'Photo processing is temporarily unavailable.'});
+    }
+    restartingDiscarded = true;
+  }
   if (existing && existing.expiresAt && existing.expiresAt <= now) {
     existing = {...existing, status: 'receiving', filename: safeFilename(request.headers.get('x-file-name')),
       sourceMime: format.mime, sourceExtension: format.extension, sourceBlob: `${id}/source.${format.extension}`,
@@ -131,14 +145,14 @@ async function createIntake(request, context, deps = {}) {
   if (existing) {
     // A content hash identifies duplicates, but is not an access credential. Never
     // grant access to a private draft unless the caller has its random bearer token.
-    if (!restartingExpired && !tokenMatches(existing, suppliedToken)) {
+    if (!restartingExpired && !restartingDiscarded && !tokenMatches(existing, suppliedToken)) {
       return json(409, {error: 'This exact photo already has a private upload. If it is yours, choose the same photo again to restore its session.'});
     }
-    if (!restartingExpired && !['receiving', 'upload-failed', 'queue-failed', 'failed', 'queued', 'processing', 'ready', 'publishing'].includes(existing.status)) {
+    if (!restartingExpired && !restartingDiscarded && !['receiving', 'upload-failed', 'queue-failed', 'failed', 'queued', 'processing', 'ready', 'publishing'].includes(existing.status)) {
       return json(409, {error: 'This private upload is no longer available.'});
     }
-    if (!restartingExpired) token = suppliedToken;
-    if (restartingExpired || ['receiving', 'upload-failed'].includes(existing.status)) {
+    if (!restartingExpired && !restartingDiscarded) token = suppliedToken;
+    if (restartingExpired || restartingDiscarded || ['receiving', 'upload-failed'].includes(existing.status)) {
       try {
         await inbox.getBlockBlobClient(existing.sourceBlob).uploadData(bytes, {
           blobHTTPHeaders: {blobContentType: 'application/octet-stream', blobCacheControl: 'no-store'}, metadata: {sha256: id}
@@ -149,7 +163,7 @@ async function createIntake(request, context, deps = {}) {
         return json(503, {id, token, status: 'upload-failed', error: 'The photo was not fully received. Choose it again to retry.'});
       }
     }
-    if (!restartingExpired && ['queued', 'processing', 'ready', 'publishing', 'failed'].includes(existing.status)) {
+    if (!restartingExpired && !restartingDiscarded && ['queued', 'processing', 'ready', 'publishing', 'failed'].includes(existing.status)) {
       return json(202, {id, token, status: existing.status, duplicate: true});
     }
     try {
@@ -203,6 +217,7 @@ async function getIntake(request, context, deps = {}) {
   try {
     const item = await getEntity(table, id);
     if (!item || !tokenMatches(item, draftToken(request))) return json(404, {error: 'This private upload is unavailable.'});
+    if (item.status === 'discarded') return json(404, {error: 'This private upload is unavailable.'});
     if (item.expiresAt <= new Date().toISOString()) return json(410, {error: 'This upload has expired. Upload the photo again to continue.'});
     let result = null;
     try { result = item.catalogJson ? JSON.parse(item.catalogJson) : null; } catch {}
@@ -231,6 +246,43 @@ async function getIntakePreview(request, context, deps = {}) {
   }
 }
 
+async function discardIntake(request, context, deps = {}) {
+  const id = imageIdFrom(request);
+  if (!id) return json(400, {error: 'Invalid upload ID.'});
+  const table = deps.table || getCatalogTableClient();
+  const queue = deps.queue || getIntakeQueueClient();
+  try {
+    let item = await getEntity(table, id);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (!item) return json(404, {error: 'This private upload is unavailable.'});
+      if (item.status === 'published') return json(409, {error: 'This photo is already in the public catalog.'});
+      if (!tokenMatches(item, draftToken(request))) return json(404, {error: 'This private upload is unavailable.'});
+      if (item.status === 'discarded') return json(200, {id, status: 'discarded'});
+      if (item.status === 'publishing') return json(409, {error: 'This photo is already being added to the catalog.'});
+      try {
+        await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'discarded',
+          activeAttemptId: '', catalogJson: '', previewBlob: '', publicBlob: '', thumbnailBlob: '',
+          thumbnailWebpBlob: '', displayBlob: '', displayWebpBlob: '', retryAction: '', lastError: '', updatedAt: new Date().toISOString()},
+        'Merge', {etag: item.etag || '*'});
+        break;
+      } catch (error) {
+        if (statusCode(error) !== 412 || attempt === 1) throw error;
+        item = await getEntity(table, id);
+      }
+    }
+    let cleanupQueued = true;
+    try { await sendJob(queue, {type: 'discard', id}); }
+    catch (error) {
+      cleanupQueued = false;
+      context.warn('Discarded catalog photo cleanup could not be queued; expiry cleanup will remove it.', id, error.code || statusCode(error) || 'unclassified');
+    }
+    return json(202, {id, status: 'discarded', cleanupQueued});
+  } catch (error) {
+    context.error('Private catalog upload could not be discarded.', error.code || statusCode(error) || 'unclassified');
+    return json(503, {error: 'The private upload could not be discarded. Try again shortly.'});
+  }
+}
+
 async function retryIntake(request, context, deps = {}) {
   const id = imageIdFrom(request);
   if (!id) return json(400, {error: 'Invalid upload ID.'});
@@ -243,14 +295,15 @@ async function retryIntake(request, context, deps = {}) {
     const action = item.retryAction === 'publish' ? 'publish' : 'process';
     const attemptId = randomBytes(16).toString('hex');
     const retryStatus = action === 'publish' ? 'publishing' : 'queued';
-    await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: retryStatus, activeAttemptId: attemptId, retryAction: '', lastError: '', updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'});
+    const transition = await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: retryStatus, activeAttemptId: attemptId, retryAction: '', lastError: '', updatedAt: new Date().toISOString()}, 'Merge', {etag: item.etag || '*'});
     try { await sendJob(queue, {type: action, id, attemptId}); }
     catch (error) {
-      await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'failed', retryAction: action, lastError: 'Retry could not be queued. Try again shortly.', updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'}).catch(() => {});
+      await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'failed', retryAction: action, lastError: 'Retry could not be queued. Try again shortly.', updatedAt: new Date().toISOString()}, 'Merge', {etag: transition.etag || '*'}).catch(() => {});
       throw error;
     }
     return json(202, {id, status: action === 'publish' ? 'publishing' : 'queued'});
   } catch (error) {
+    if (statusCode(error) === 412) return json(409, {error: 'This upload changed while the retry was being queued. Check its status and try again.'});
     context.error('Catalog intake retry failed.', error.code || statusCode(error) || 'unclassified');
     return json(503, {error: 'Retry could not be queued. Try again shortly.'});
   }
@@ -271,14 +324,15 @@ async function publishIntake(request, context, deps = {}) {
     const currentRecord = JSON.parse(item.catalogJson || '{}');
     const {record, uploaderName} = normalizeSubmission(body, currentRecord, id);
     const attemptId = randomBytes(16).toString('hex');
-    await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'publishing', activeAttemptId: attemptId, catalogJson: JSON.stringify(record), uploaderName, updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'});
+    const transition = await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'publishing', activeAttemptId: attemptId, catalogJson: JSON.stringify(record), uploaderName, updatedAt: new Date().toISOString()}, 'Merge', {etag: item.etag || '*'});
     try { await sendJob(queue, {type: 'publish', id, attemptId}); }
     catch (error) {
-      await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'failed', retryAction: 'publish', lastError: 'Publication could not be queued. Choose Retry to continue.', updatedAt: new Date().toISOString()}, 'Merge', {etag: '*'}).catch(() => {});
+      await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'failed', retryAction: 'publish', lastError: 'Publication could not be queued. Choose Retry to continue.', updatedAt: new Date().toISOString()}, 'Merge', {etag: transition.etag || '*'}).catch(() => {});
       throw error;
     }
     return json(202, {id, status: 'publishing'});
   } catch (error) {
+    if (statusCode(error) === 412) return json(409, {error: 'This upload changed while it was being submitted. Check its status and try again.'});
     if (error instanceof SyntaxError) return json(503, {error: 'The catalog result is invalid. Retry analysis before publishing.'});
     if (error.message?.startsWith('Enter a contributor') || error.message?.startsWith('Contributor names')) return json(400, {error: error.message});
     if (error.message?.startsWith('Tags')) return json(400, {error: error.message});
@@ -352,10 +406,11 @@ async function updateCatalogAttribution(request, context, deps = {}) {
 app.http('createCatalogIntake', {route: 'intakes', methods: ['POST'], authLevel: 'anonymous', handler: createIntake});
 app.http('getCatalogIntake', {route: 'intakes/{id}', methods: ['GET'], authLevel: 'anonymous', handler: getIntake});
 app.http('getCatalogIntakePreview', {route: 'intakes/{id}/preview', methods: ['GET'], authLevel: 'anonymous', handler: getIntakePreview});
+app.http('discardCatalogIntake', {route: 'intakes/{id}', methods: ['DELETE'], authLevel: 'anonymous', handler: discardIntake});
 app.http('retryCatalogIntake', {route: 'intakes/{id}/retry', methods: ['POST'], authLevel: 'anonymous', handler: retryIntake});
 app.http('publishCatalogIntake', {route: 'intakes/{id}/publish', methods: ['POST'], authLevel: 'anonymous', handler: publishIntake});
 app.http('getCatalogItems', {route: 'catalog-items', methods: ['GET'], authLevel: 'anonymous', handler: getCatalogItems});
 app.http('hideCatalogItem', {route: 'catalog-items/{id}/hide', methods: ['POST'], authLevel: 'anonymous', handler: hideCatalogItem});
 app.http('updateCatalogAttribution', {route: 'catalog-items/{id}/attribution', methods: ['PATCH'], authLevel: 'anonymous', handler: updateCatalogAttribution});
 
-module.exports = {MAX_UPLOAD_BYTES, createIntake, getIntake, getIntakePreview, retryIntake, publishIntake, getCatalogItems, hideCatalogItem, updateCatalogAttribution, imageFormat, normalizeDisplayName, normalizeSubmission, safeFilename, tokenMatches};
+module.exports = {MAX_UPLOAD_BYTES, createIntake, getIntake, getIntakePreview, discardIntake, retryIntake, publishIntake, getCatalogItems, hideCatalogItem, updateCatalogAttribution, imageFormat, normalizeDisplayName, normalizeSubmission, safeFilename, tokenMatches};

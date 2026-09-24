@@ -4,6 +4,7 @@
     { "route": "/api/tag-overrides/save-many", "methods": ["POST"], "allowedRoles": ["catalog_editor"] },
     { "route": "/api/intakes", "methods": ["POST"], "allowedRoles": ["anonymous"] },
     { "route": "/api/intakes/{id}/preview", "methods": ["GET"], "allowedRoles": ["anonymous"] },
+    { "route": "/api/intakes/{id}", "methods": ["DELETE"], "allowedRoles": ["anonymous"] },
     { "route": "/api/intakes/{id}/retry", "methods": ["POST"], "allowedRoles": ["anonymous"] },
     { "route": "/api/intakes/{id}/publish", "methods": ["POST"], "allowedRoles": ["anonymous"] },
     { "route": "/api/intakes/{id}", "methods": ["GET"], "allowedRoles": ["anonymous"] },

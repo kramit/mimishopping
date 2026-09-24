@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const {createHash} = require('node:crypto');
 const sharp = require('sharp');
 const hostConfig = require('../host.json');
-const {normalizeAgentResult, normalizeWebResearch, responseText, itemId, processImage, publishImage, expireDrafts, normalizeImages, handlePoisonQueue} = require('../src/catalog-worker');
+const {normalizeAgentResult, normalizeWebResearch, responseText, itemId, processImage, publishImage, discardPrivateIntake, expireDrafts, normalizeImages, handlePoisonQueue} = require('../src/catalog-worker');
 
 function sha(value) { return createHash('sha256').update(value).digest('hex'); }
 function makeTable(initial = []) {
@@ -60,12 +60,44 @@ test('Responses output parsing and queue message validation handle supported pay
   assert.equal(responseText({output_text: '{"ok":true}'}), '{"ok":true}');
   assert.equal(responseText({output: [{type: 'message', content: [{type: 'output_text', text: 'result'}]}]}), 'result');
   assert.deepEqual(itemId(JSON.stringify({type: 'process', id: 'A'.repeat(64)})), {type: 'process', id: 'a'.repeat(64)});
+  assert.deepEqual(itemId(JSON.stringify({type: 'discard', id: 'b'.repeat(64)})), {type: 'discard', id: 'b'.repeat(64)});
   assert.throws(() => itemId({type: 'other', id: 'a'.repeat(64)}), /Invalid/);
 });
 
 test('Functions reads raw JSON messages sent by the Azure Queue SDK', () => {
   assert.equal(hostConfig.extensions.queues.messageEncoding, 'none');
   assert.deepEqual(itemId(JSON.stringify({type: 'process', id: 'a'.repeat(64)})), {type: 'process', id: 'a'.repeat(64)});
+});
+
+test('discard cleanup removes private blobs only while the intake is discarded', async () => {
+  const id = '8'.repeat(64), sourceName = `${id}/source.jpg`, previewName = `${id}/preview.jpg`;
+  const table = makeTable([{partitionKey: 'catalog', rowKey: id, status: 'queued'}]);
+  const blobService = makeBlobService({'contribution-inbox': {
+    [sourceName]: {bytes: Buffer.from('source')}, [previewName]: {bytes: Buffer.from('preview')}
+  }});
+  await discardPrivateIntake(id, {table, blobService});
+  assert.equal(blobService.getContainerClient('contribution-inbox').blobs.size, 2);
+  await table.updateEntity({partitionKey: 'catalog', rowKey: id, status: 'discarded'}, 'Merge');
+  await discardPrivateIntake(id, {table, blobService});
+  assert.equal(blobService.getContainerClient('contribution-inbox').blobs.size, 0);
+  assert.equal(table.rows.get(id).status, 'discarded');
+});
+
+test('processing cleans up if the uploader discards during AI analysis', async () => {
+  const id = '9'.repeat(64), attemptId = 'd'.repeat(32), sourceName = `${id}/source.jpg`;
+  const source = await sharp({create: {width: 12, height: 10, channels: 3, background: '#aabbcc'}}).jpeg().toBuffer();
+  const table = makeTable([{partitionKey: 'catalog', rowKey: id, status: 'queued', activeAttemptId: attemptId,
+    sourceBlob: sourceName, expiresAt: '2099-01-01T00:00:00.000Z'}]);
+  const blobService = makeBlobService({'contribution-inbox': {[sourceName]: {bytes: source}}});
+  await processImage(id, context, {table, blobService,
+    normalizeImages: async () => ({metadata: {width: 12, height: 10}}),
+    identifyImage: async () => {
+      await table.updateEntity({partitionKey: 'catalog', rowKey: id, status: 'discarded', activeAttemptId: '', draftTokenHash: ''}, 'Merge');
+      return agent;
+    }
+  }, attemptId);
+  assert.equal(table.rows.get(id).status, 'discarded');
+  assert.equal(blobService.getContainerClient('contribution-inbox').blobs.size, 0);
 });
 
 test('stale poison messages cannot fail a newer attempt or replace a ready result', async () => {

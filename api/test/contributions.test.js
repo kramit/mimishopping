@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {createHash} = require('node:crypto');
-const {createIntake, getIntake, retryIntake, publishIntake, getCatalogItems, hideCatalogItem, updateCatalogAttribution, imageFormat, normalizeSubmission} = require('../src/functions/contributions');
+const {createIntake, getIntake, discardIntake, retryIntake, publishIntake, getCatalogItems, hideCatalogItem, updateCatalogAttribution, imageFormat, normalizeSubmission} = require('../src/functions/contributions');
 
 function context() { return {log() {}, warn() {}, error() {}}; }
 function request({headers = {}, params = {}, bytes, body, principal} = {}) {
@@ -66,6 +66,51 @@ test('anonymous intake stores the image privately and returns a token-gated draf
   table.rows.get(hash(png)).retryAction = 'publish';
   const retryable = await getIntake(request({params: {id: hash(png)}, headers: {'x-catalog-draft-token': response.jsonBody.token}}), context(), {table});
   assert.equal(retryable.jsonBody.retryAction, 'publish');
+});
+
+test('a valid draft token discards a private upload and queues cleanup', async () => {
+  const id = hash(png), token = 'e'.repeat(64);
+  const table = makeTable([{partitionKey: 'catalog', rowKey: id, status: 'ready', draftTokenHash: hash(token),
+    activeAttemptId: 'a'.repeat(32), catalogJson: '{"description":"private result"}', previewBlob: `${id}/preview.jpg`}]);
+  const queue = makeQueue();
+  const response = await discardIntake(request({params: {id}, headers: {'x-catalog-draft-token': token}}), context(), {table, queue});
+  assert.equal(response.status, 202);
+  assert.equal(response.jsonBody.status, 'discarded');
+  assert.equal(response.jsonBody.cleanupQueued, true);
+  assert.equal(table.rows.get(id).draftTokenHash, hash(token));
+  assert.equal(table.rows.get(id).activeAttemptId, '');
+  assert.equal(table.rows.get(id).catalogJson, '');
+  assert.deepEqual(queue.messages, [{type: 'discard', id}]);
+  const inaccessible = await getIntake(request({params: {id}, headers: {'x-catalog-draft-token': token}}), context(), {table});
+  assert.equal(inaccessible.status, 404);
+  const repeated = await discardIntake(request({params: {id}, headers: {'x-catalog-draft-token': token}}), context(), {table, queue});
+  assert.equal(repeated.status, 200);
+  assert.equal(repeated.jsonBody.status, 'discarded');
+  assert.equal(queue.messages.length, 1);
+});
+
+test('discard requires the private token and cannot race a queued publication', async () => {
+  const id = hash(png), token = 'f'.repeat(64);
+  const table = makeTable([{partitionKey: 'catalog', rowKey: id, status: 'publishing', draftTokenHash: hash(token)}]);
+  const queue = makeQueue();
+  const unauthorized = await discardIntake(request({params: {id}, headers: {'x-catalog-draft-token': '1'.repeat(64)}}), context(), {table, queue});
+  assert.equal(unauthorized.status, 404);
+  const publishing = await discardIntake(request({params: {id}, headers: {'x-catalog-draft-token': token}}), context(), {table, queue});
+  assert.equal(publishing.status, 409);
+  assert.equal(table.rows.get(id).status, 'publishing');
+  assert.equal(queue.messages.length, 0);
+});
+
+test('the same image can be uploaded again after its earlier draft was discarded', async () => {
+  const id = hash(png), table = makeTable([{partitionKey: 'catalog', rowKey: id, status: 'discarded', draftTokenHash: '', expiresAt: '2099-01-01T00:00:00.000Z'}]);
+  const inbox = makeInbox(), queue = makeQueue();
+  const response = await createIntake(request({bytes: png}), context(), {table, inbox, queue});
+  assert.equal(response.status, 202);
+  assert.equal(response.jsonBody.status, 'queued');
+  assert.match(response.jsonBody.token, /^[a-f0-9]{64}$/);
+  assert.equal(table.rows.get(id).status, 'queued');
+  assert.equal(queue.messages[0].type, 'process');
+  assert.ok(inbox.uploads.has(`${id}/source.png`));
 });
 
 test('oversized uploads and invalid signatures are rejected before storage', async () => {

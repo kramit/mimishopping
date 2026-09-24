@@ -112,6 +112,8 @@ main { max-width: 1320px; margin: auto; padding: 25px 24px 40px; }
 .button-quiet:hover { background: #f0eee5; }
 .button-primary { background: var(--pine); color: white; }
 .button-primary:hover { background: #285457; }
+.button-danger { border-color: #e5c0b7; background: #fff8f6; color: #934c43; }
+.button-danger:hover { background: #fae9e7; }
 .save-image { display: inline-flex; width: fit-content; margin: 10px 0 2px; text-decoration: none; }
 .tag-storage-hint, .tag-status { min-height: 1em; margin: 8px 3px 0; color: var(--muted); font-size: .75rem; }
 .filter-note { margin: 8px 3px 0; color: var(--muted); font-size: .7rem; }

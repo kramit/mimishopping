@@ -150,7 +150,7 @@ async function normalizeImages(source) {
 
 function itemId(queueItem) {
   const value = typeof queueItem === 'string' ? JSON.parse(queueItem) : queueItem;
-  if (!value || !['process', 'publish', 'remove'].includes(value.type) || !/^[a-f0-9]{64}$/i.test(value.id || '') || (value.attemptId !== undefined && !/^[a-f0-9]{32}$/i.test(value.attemptId))) throw new Error('Invalid catalog queue message.');
+  if (!value || !['process', 'publish', 'remove', 'discard'].includes(value.type) || !/^[a-f0-9]{64}$/i.test(value.id || '') || (value.attemptId !== undefined && !/^[a-f0-9]{32}$/i.test(value.attemptId))) throw new Error('Invalid catalog queue message.');
   return {type: value.type, id: value.id.toLowerCase(), ...(value.attemptId ? {attemptId: value.attemptId.toLowerCase()} : {})};
 }
 
@@ -163,15 +163,21 @@ async function processImage(id, context, deps = {}, attemptId = '') {
   const inbox = (deps.blobService || getBlobService()).getContainerClient(process.env.CATALOG_INTAKE_CONTAINER || 'contribution-inbox');
   const item = await table.getEntity(PARTITION, id);
   if (item.activeAttemptId ? item.activeAttemptId !== attemptId : Boolean(attemptId)) return;
-  if (['ready', 'publishing', 'published', 'hidden'].includes(item.status)) return;
+  if (['ready', 'publishing', 'published', 'hidden', 'discarded'].includes(item.status)) return;
   if (item.expiresAt && item.expiresAt <= new Date().toISOString()) return;
   const filename = text(item.filename, 120) || 'phone-photo';
   try {
-    await updateEntity(table, id, {status: 'processing', updatedAt: new Date().toISOString(), lastError: ''});
+    await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'processing', updatedAt: new Date().toISOString(), lastError: ''}, 'Merge', {etag: item.etag || '*'});
     const source = await inbox.getBlobClient(item.sourceBlob).downloadToBuffer();
     const outputs = await (deps.normalizeImages || normalizeImages)(source);
+    let current = await table.getEntity(PARTITION, id);
+    if (current.status === 'discarded') { await deletePrivateBlobs(inbox, id); return; }
+    if (attemptId && current.activeAttemptId !== attemptId) return;
     const result = await (deps.identifyImage || identifyImage)(source, filename, context);
     const record = normalizeAgentResult(result, {id, filename});
+    current = await table.getEntity(PARTITION, id);
+    if (current.status === 'discarded') { await deletePrivateBlobs(inbox, id); return; }
+    if (attemptId && current.activeAttemptId !== attemptId) return;
     const previewBlob = `${id}/preview.jpg`;
     const safeBlob = `${id}/publish.jpg`;
     const thumbBlob = `${id}/thumb.jpg`;
@@ -185,14 +191,20 @@ async function processImage(id, context, deps = {}, attemptId = '') {
     await inbox.getBlockBlobClient(thumbWebpBlob).uploadData(outputs.thumbnailWebp, {blobHTTPHeaders: {...privateOptions.blobHTTPHeaders, blobContentType: 'image/webp'}, metadata: {sha256: outputs.thumbWebpSha256}});
     await inbox.getBlockBlobClient(displayBlob).uploadData(outputs.display, {...privateOptions, metadata: {sha256: outputs.displaySha256}});
     await inbox.getBlockBlobClient(displayWebpBlob).uploadData(outputs.displayWebp, {blobHTTPHeaders: {...privateOptions.blobHTTPHeaders, blobContentType: 'image/webp'}, metadata: {sha256: outputs.displayWebpSha256}});
-    await updateEntity(table, id, {status: 'ready', catalogJson: JSON.stringify(record), previewBlob, publicBlob: safeBlob,
+    current = await table.getEntity(PARTITION, id);
+    if (current.status === 'discarded') { await deletePrivateBlobs(inbox, id); return; }
+    if (attemptId && current.activeAttemptId !== attemptId) return;
+    await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'ready', catalogJson: JSON.stringify(record), previewBlob, publicBlob: safeBlob,
       thumbnailBlob: thumbBlob, thumbnailWebpBlob: thumbWebpBlob, displayBlob, displayWebpBlob,
       publicSha256: outputs.publicSha256, thumbnailSha256: outputs.thumbSha256, thumbnailWebpSha256: outputs.thumbWebpSha256,
       displaySha256: outputs.displaySha256, displayWebpSha256: outputs.displayWebpSha256,
       imageWidth: outputs.metadata.width || 0, imageHeight: outputs.metadata.height || 0,
-      updatedAt: new Date().toISOString(), lastError: ''});
+      updatedAt: new Date().toISOString(), lastError: ''}, 'Merge', {etag: current.etag || '*'});
   } catch (error) {
-    await updateEntity(table, id, {status: 'queued', updatedAt: new Date().toISOString(), lastError: text(error.message, 500)}).catch(() => {});
+    const current = await table.getEntity(PARTITION, id).catch(() => null);
+    if (current?.status === 'discarded') { await deletePrivateBlobs(inbox, id).catch(() => {}); return; }
+    if (current && attemptId && current.activeAttemptId !== attemptId) return;
+    await table.updateEntity({partitionKey: PARTITION, rowKey: id, status: 'queued', updatedAt: new Date().toISOString(), lastError: text(error.message, 500)}, 'Merge', {etag: current?.etag || '*'}).catch(() => {});
     throw error;
   }
 }
@@ -271,6 +283,18 @@ async function removePublishedImage(id, deps = {}) {
   if (item.status !== 'hidden') await updateEntity(table, id, {status: 'hidden', updatedAt: new Date().toISOString()});
 }
 
+async function discardPrivateIntake(id, deps = {}) {
+  const table = deps.table || getTable();
+  const blob = deps.blobService || getBlobService();
+  const inbox = blob.getContainerClient(process.env.CATALOG_INTAKE_CONTAINER || 'contribution-inbox');
+  const item = await table.getEntity(PARTITION, id).catch(error => {
+    if (error.statusCode === 404) return null;
+    throw error;
+  });
+  if (item?.status !== 'discarded') return;
+  await deletePrivateBlobs(inbox, id);
+}
+
 async function expireDrafts(context, deps = {}) {
   const table = deps.table || getTable();
   const blob = deps.blobService || getBlobService();
@@ -290,6 +314,7 @@ async function handleCatalogQueue(queueItem, context, deps = {}) {
   const job = itemId(queueItem);
   if (job.type === 'process') return processImage(job.id, context, deps, job.attemptId);
   if (job.type === 'publish') return publishImage(job.id, context, deps, job.attemptId);
+  if (job.type === 'discard') return discardPrivateIntake(job.id, deps);
   return removePublishedImage(job.id, deps);
 }
 
@@ -297,10 +322,11 @@ async function handlePoisonQueue(queueItem, context, deps = {}) {
   let job;
   try { job = typeof queueItem === 'string' ? JSON.parse(queueItem) : queueItem; }
   catch { context.error('Ignoring an invalid catalog poison message.'); return; }
-  if (!job || !['process', 'publish'].includes(job.type) || !/^[a-f0-9]{64}$/i.test(job.id || '') || (job.attemptId !== undefined && !/^[a-f0-9]{32}$/i.test(job.attemptId))) return;
+  if (!job || !['process', 'publish', 'discard'].includes(job.type) || !/^[a-f0-9]{64}$/i.test(job.id || '') || (job.attemptId !== undefined && !/^[a-f0-9]{32}$/i.test(job.attemptId))) return;
   const table = deps.table || getTable();
   try {
     const item = await table.getEntity(PARTITION, job.id.toLowerCase());
+    if (job.type === 'discard') return;
     const attemptId = job.attemptId?.toLowerCase() || '';
     if (item.activeAttemptId ? item.activeAttemptId !== attemptId : Boolean(attemptId)) return;
     if (job.type === 'process' && !['queued', 'processing'].includes(item.status)) return;
@@ -326,4 +352,4 @@ app.timer('expireCatalogDrafts', {
   handler: async (_timer, context) => expireDrafts(context)
 });
 
-module.exports = {normalizeAgentResult, normalizeWebResearch, responseText, itemId, safeUrl, handleCatalogQueue, handlePoisonQueue, processImage, publishImage, expireDrafts, identifyImage, normalizeImages};
+module.exports = {normalizeAgentResult, normalizeWebResearch, responseText, itemId, safeUrl, handleCatalogQueue, handlePoisonQueue, processImage, publishImage, discardPrivateIntake, expireDrafts, identifyImage, normalizeImages};
