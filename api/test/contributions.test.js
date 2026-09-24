@@ -58,7 +58,7 @@ test('anonymous intake stores the image privately and returns a token-gated draf
   assert.equal(table.rows.get(hash(png)).status, 'queued');
   const privateResult = await getIntake(request({params: {id: hash(png)}}), context(), {table});
   assert.equal(privateResult.status, 404);
-  const authorized = await getIntake(request({params: {id: hash(png)}, headers: {authorization: `Bearer ${response.jsonBody.token}`}}), context(), {table});
+  const authorized = await getIntake(request({params: {id: hash(png)}, headers: {'x-catalog-draft-token': response.jsonBody.token}}), context(), {table});
   assert.equal(authorized.status, 200);
   assert.equal(authorized.jsonBody.status, 'queued');
 });
@@ -99,14 +99,14 @@ test('uploading a duplicate cannot take over another visitor private draft', asy
 test('the browser-held draft token can safely resume a source upload after a lost response', async () => {
   const id = hash(png), token = 'd'.repeat(64), table = makeTable(), queue = makeQueue();
   const failingInbox = {getBlockBlobClient() { return {async uploadData() { throw new Error('temporary storage failure'); }}; }};
-  const interrupted = await createIntake(request({headers: {authorization: `Bearer ${token}`}, bytes: png}), context(), {table, inbox: failingInbox, queue});
+  const interrupted = await createIntake(request({headers: {'x-catalog-draft-token': token}, bytes: png}), context(), {table, inbox: failingInbox, queue});
   assert.equal(interrupted.status, 503);
   assert.equal(interrupted.jsonBody.status, 'upload-failed');
   assert.equal(interrupted.jsonBody.token, token);
   assert.equal(table.rows.get(id).draftTokenHash, hash(token));
 
   const inbox = makeInbox();
-  const resumed = await createIntake(request({headers: {authorization: `Bearer ${token}`}, bytes: png}), context(), {table, inbox, queue});
+  const resumed = await createIntake(request({headers: {'x-catalog-draft-token': token}, bytes: png}), context(), {table, inbox, queue});
   assert.equal(resumed.status, 202);
   assert.equal(resumed.jsonBody.status, 'queued');
   assert.equal(resumed.jsonBody.token, token);
@@ -121,13 +121,13 @@ test('retry marks the intended action before enqueueing and preserves it after e
     assert.equal(table.rows.get(id).status, 'publishing');
     this.messages.push(JSON.parse(message));
   }};
-  const response = await retryIntake(request({params: {id}, headers: {authorization: `Bearer ${token}`}}), context(), {table, queue});
+  const response = await retryIntake(request({params: {id}, headers: {'x-catalog-draft-token': token}}), context(), {table, queue});
   assert.equal(response.status, 202);
   assert.deepEqual(queue.messages, [{type: 'publish', id}]);
 
   Object.assign(table.rows.get(id), {status: 'failed', retryAction: 'publish'});
   const failingQueue = {async sendMessage() { throw new Error('queue unavailable'); }};
-  const failed = await retryIntake(request({params: {id}, headers: {authorization: `Bearer ${token}`}}), context(), {table, queue: failingQueue});
+  const failed = await retryIntake(request({params: {id}, headers: {'x-catalog-draft-token': token}}), context(), {table, queue: failingQueue});
   assert.equal(failed.status, 503);
   assert.equal(table.rows.get(id).status, 'failed');
   assert.equal(table.rows.get(id).retryAction, 'publish');
@@ -137,9 +137,9 @@ test('submit requires a ready result and contributor name, then adds an attribut
   const id = 'a'.repeat(64), token = 'b'.repeat(64);
   const row = {partitionKey: 'catalog', rowKey: id, status: 'ready', draftTokenHash: hash(token), catalogJson: JSON.stringify({id, confidence: 'high', tags: ['skincare']})};
   const table = makeTable([row]), queue = makeQueue();
-  const missingName = await publishIntake(request({params: {id}, headers: {authorization: `Bearer ${token}`}, body: {category: 'Facial skincare', tags: ['skincare']}}), context(), {table, queue});
+  const missingName = await publishIntake(request({params: {id}, headers: {'x-catalog-draft-token': token}, body: {category: 'Facial skincare', tags: ['skincare']}}), context(), {table, queue});
   assert.equal(missingName.status, 400);
-  const response = await publishIntake(request({params: {id}, headers: {authorization: `Bearer ${token}`}, body: {uploaderName: 'Mimi', category: 'Facial skincare', tags: ['skincare', 'Contributor: forged']}}), context(), {table, queue});
+  const response = await publishIntake(request({params: {id}, headers: {'x-catalog-draft-token': token}, body: {uploaderName: 'Mimi', category: 'Facial skincare', tags: ['skincare', 'Contributor: forged']}}), context(), {table, queue});
   assert.equal(response.status, 202);
   const record = JSON.parse(table.rows.get(id).catalogJson);
   assert.deepEqual(record.tags, ['skincare', 'Contributor: Mimi']);

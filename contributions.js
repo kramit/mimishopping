@@ -161,12 +161,12 @@
 
   async function getStatus() {
     if (!active?.id || !active?.token) throw new Error('This private upload session has expired. Choose the photo again.');
-    const response = await fetch(`/api/intakes/${encodeURIComponent(active.id)}`, {headers: {authorization: `Bearer ${active.token}`, 'cache-control': 'no-store'}});
+    const response = await fetch(`/api/intakes/${encodeURIComponent(active.id)}`, {headers: {'x-catalog-draft-token': active.token, 'cache-control': 'no-store'}});
     return parseResponse(response);
   }
 
   async function fetchPrivatePreview() {
-    const response = await fetch(`/api/intakes/${encodeURIComponent(active.id)}/preview`, {headers: {authorization: `Bearer ${active.token}`, 'cache-control': 'no-store'}});
+    const response = await fetch(`/api/intakes/${encodeURIComponent(active.id)}/preview`, {headers: {'x-catalog-draft-token': active.token, 'cache-control': 'no-store'}});
     if (!response.ok) return;
     setPreview(URL.createObjectURL(await response.blob()));
   }
@@ -225,7 +225,7 @@
       const response = await fetch('/api/intakes', {method: 'POST', headers: {
         'content-type': file.type || 'application/octet-stream',
         'x-file-name': encodeURIComponent(file.name || 'phone-photo'),
-        authorization: `Bearer ${pending.token}`
+        'x-catalog-draft-token': pending.token
       }, body: file});
       const payload = await response.json().catch(() => ({}));
       if (payload.id && (payload.token || payload.status === 'published')) {
@@ -269,7 +269,7 @@
     }
     retryButton.disabled = true;
     try {
-      await parseResponse(await fetch(`/api/intakes/${encodeURIComponent(active.id)}/retry`, {method: 'POST', headers: {authorization: `Bearer ${active.token}`}}));
+      await parseResponse(await fetch(`/api/intakes/${encodeURIComponent(active.id)}/retry`, {method: 'POST', headers: {'x-catalog-draft-token': active.token}}));
       retryButton.hidden = true; setStatus('Retry queued. Your photo remains private while it is processed.'); await pollUntilReady();
     } catch (error) { setStatus(error.message); }
     finally { retryButton.disabled = false; }
@@ -297,7 +297,7 @@
     setStatus('Adding your contribution to the public catalog…');
     try {
       const response = await fetch(`/api/intakes/${encodeURIComponent(active.id)}/publish`, {
-        method: 'POST', headers: {authorization: `Bearer ${active.token}`, 'content-type': 'application/json'},
+        method: 'POST', headers: {'x-catalog-draft-token': active.token, 'content-type': 'application/json'},
         body: JSON.stringify({uploaderName: nameInput.value, category: categoryInput.value, tags: parseTags(tagsInput.value)})
       });
       const payload = await parseResponse(response);

@@ -43,9 +43,8 @@ function imageIdFrom(request) {
 }
 
 function draftToken(request) {
-  const header = request.headers.get('authorization') || '';
-  const match = /^Bearer\s+([a-f0-9]{64})$/i.exec(header);
-  return match?.[1] || '';
+  const value = request.headers.get('x-catalog-draft-token') || '';
+  return /^[a-f0-9]{64}$/i.test(value) ? value : '';
 }
 
 function tokenMatches(item, token) {
