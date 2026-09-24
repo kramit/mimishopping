@@ -6,6 +6,8 @@ param location string = resourceGroup().location
 @maxLength(24)
 param storageAccountName string
 param staticWebAppName string
+@description('Email address for the monthly resource-group cost budget alerts.')
+param budgetContactEmail string
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName
@@ -50,6 +52,33 @@ resource site 'Microsoft.Web/staticSites@2022-09-01' = {
   location: location
   sku: { name: 'Free', tier: 'Free' }
   tags: { application: 'MimisJapanShopping', managedBy: 'Bicep' }
+}
+
+resource monthlyBudget 'Microsoft.Consumption/budgets@2018-10-01' = {
+  name: 'mimi-shopping-monthly-cost-alert'
+  properties: {
+    category: 'Cost'
+    amount: 5
+    timeGrain: 'Monthly'
+    timePeriod: {
+      startDate: '2026-09-01T00:00:00Z'
+      endDate: '2027-09-30T00:00:00Z'
+    }
+    notifications: {
+      Actual_GreaterThan_80_Percent: {
+        enabled: true
+        operator: 'GreaterThan'
+        threshold: 80
+        contactEmails: [budgetContactEmail]
+      }
+      Actual_GreaterThan_100_Percent: {
+        enabled: true
+        operator: 'GreaterThan'
+        threshold: 100
+        contactEmails: [budgetContactEmail]
+      }
+    }
+  }
 }
 
 output storageName string = storage.name
