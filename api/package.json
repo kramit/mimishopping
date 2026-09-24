@@ -1,0 +1,17 @@
+{
+  "name": "mimi-japan-shopping-api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/functions/*.js",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@azure/core-auth": "^1.11.0",
+    "@azure/data-tables": "^13.3.0",
+    "@azure/functions": "^4.7.2"
+  }
+}

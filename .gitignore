@@ -1,0 +1,11 @@
+node_modules/
+.venv/
+.env
+.env.*
+local.settings.json
+Photos/
+Catalog/
+*.sqlite
+*.db
+.DS_Store
+mimi-japan-shopping-local-edits.json

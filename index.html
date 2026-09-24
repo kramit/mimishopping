@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#173d42">
+  <meta name="description" content="Mimi's Japan shopping — a public photo catalog of products and finds from trips to Japan.">
+  <title>Mimi's Japan shopping</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="assets-config.js"></script>
+  <script src="catalog-data.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow"><span aria-hidden="true">日本の旅 · 旅先の買いもの</span> <span>JAPAN TRAVEL FINDS</span></p>
+      <h1>Mimi's Japan shopping</h1>
+      <p id="summary" class="summary">Loading catalog…</p>
+      <div class="hero-stamp" aria-hidden="true"><span>日本</span><small>JAPAN</small></div>
+    </div>
+  </header>
+  <main>
+    <section class="toolbar" aria-label="Filter images">
+      <label class="search">Search<input id="search" type="search" placeholder="Product, brand, Japanese text…"></label>
+      <label>Category<select id="category"><option value="">All categories</option></select></label>
+      <label>Tag<select id="tag"><option value="">All tags</option></select></label>
+      <label>Trip / date<select id="trip"><option value="">All trips</option></select></label>
+      <label>Trip year<select id="year"><option value="">All years</option></select></label>
+      <label>Web research<select id="researchStatus">
+        <option value="">All research statuses</option>
+        <option value="matched">Matched</option>
+        <option value="partial">Partial match</option>
+        <option value="pending">Pending</option>
+        <option value="unmatched">No match found</option>
+      </select></label>
+      <label class="review-toggle"><input id="needsReview" type="checkbox"><span id="reviewToggleLabel">Photo review</span></label>
+      <div class="tag-tools" aria-label="Editor access">
+        <a id="editorLogin" class="button button-quiet" href="/.auth/login/aad">Editor sign in</a>
+        <a id="editorLogout" class="button button-quiet" href="/.auth/logout" hidden>Sign out</a>
+      </div>
+      <div class="tag-tools" aria-label="Manage tag edits">
+        <button id="exportTags" class="button button-quiet" type="button" hidden>Export tag backup</button>
+        <button id="importTags" class="button button-quiet" type="button" hidden>Import tag backup</button>
+        <input id="importTagsFile" type="file" accept="application/json,.json" hidden>
+      </div>
+    </section>
+    <p class="filter-note">Trip groups are approximate and use dates embedded in photo filenames where available.</p>
+    <p id="tagStorageHint" class="tag-storage-hint"></p>
+    <p id="tagStatus" class="tag-status" aria-live="polite"></p>
+    <details id="reviewQueuePanel" class="review-queue">
+      <summary><span id="reviewQueueSummary">Photo review queue</span><span class="queue-hint">Open a photo to inspect it; local checks do not update the catalog ledger.</span></summary>
+      <div id="reviewQueueList" class="review-queue-list"></div>
+    </details>
+    <section class="tag-panel" aria-labelledby="tagCloudHeading">
+      <div class="tag-panel-heading">
+        <div><p class="section-kicker">EXPLORE THE COLLECTION</p><h2 id="tagCloudHeading">Browse by tag</h2></div>
+        <p id="tagCloudSummary" class="tag-cloud-summary"></p>
+      </div>
+      <div id="tagCloud" class="tag-cloud" aria-label="Tag cloud"></div>
+      <button id="expandTagCloud" class="button button-quiet tag-cloud-toggle" type="button">Show all tags</button>
+    </section>
+    <div class="view-controls" role="group" aria-label="Catalog view">
+      <button id="photosViewButton" class="button button-primary" type="button" aria-pressed="true">Photos</button>
+      <button id="productsViewButton" class="button button-quiet" type="button" aria-pressed="false">Products</button>
+      <span class="view-help">Product groups combine photos with the same identified item.</span>
+    </div>
+    <p id="resultCount" class="result-count" aria-live="polite"></p>
+    <section id="gallery" class="gallery" aria-label="Shopping photos"></section>
+    <section id="productsView" class="product-gallery" aria-label="Products" hidden></section>
+    <nav id="pagination" class="pagination" aria-label="Catalog pages" hidden>
+      <button id="previousPage" class="button button-quiet" type="button">Previous</button>
+      <span id="pageSummary" aria-live="polite"></span>
+      <button id="nextPage" class="button button-quiet" type="button">Next</button>
+    </nav>
+    <p id="empty" class="empty" hidden>No images match these filters.</p>
+  </main>
+  <dialog id="detail" aria-label="Image details">
+    <button id="closeDetail" class="close" aria-label="Close">×</button>
+    <div id="detailContent"></div>
+  </dialog>
+  <footer><span>Photos served from Azure Storage</span><span aria-hidden="true"> · </span><span>Catalog edits sync for Mimi</span></footer>
+</body>
+</html>
