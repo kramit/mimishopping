@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#173d42">
-  <meta name="description" content="Mimi's Japan shopping — a public photo catalog of products and finds from trips to Japan.">
-  <title>Mimi's Japan shopping</title>
+  <meta name="description" content="Mimi's Shopping Encyclopedia — a public catalog of products and finds from trips to Japan.">
+  <title>Mimi's Shopping Encyclopedia</title>
+  <link rel="preload" as="image" href="assets/mimi-encyclopedia-hero.webp" fetchpriority="high">
   <link rel="stylesheet" href="styles.css">
   <script src="assets-config.js"></script>
   <script src="catalog-data.js"></script>
@@ -16,9 +17,11 @@
   <header class="hero">
     <div class="hero-inner">
       <p class="eyebrow"><span aria-hidden="true">日本の旅 · 旅先の買いもの</span> <span>JAPAN TRAVEL FINDS</span></p>
-      <h1>Mimi's Japan shopping</h1>
+      <div class="hero-brand">
+        <img class="hero-brand-logo" src="assets/mimi-cat-logo.webp" alt="" aria-hidden="true">
+        <h1>Mimi's Shopping Encyclopedia</h1>
+      </div>
       <p id="summary" class="summary">Loading catalog…</p>
-      <div class="hero-stamp" aria-hidden="true"><span>日本</span><small>JAPAN</small></div>
     </div>
   </header>
   <main>

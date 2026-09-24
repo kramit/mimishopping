@@ -24,19 +24,20 @@ button, input, select, textarea { font: inherit; }
   color: #fffaf0;
   background-color: var(--pine);
   background-image:
-    radial-gradient(ellipse at 88% 118%, transparent 0 22%, #ffffff0b 22.2% 22.6%, transparent 22.8% 29%, #ffffff0a 29.2% 29.6%, transparent 29.8% 36%, #ffffff09 36.2% 36.6%, transparent 36.8%),
-    linear-gradient(115deg, #173d42 0%, #21494a 58%, #2d5652 100%);
-  border-bottom: 4px solid var(--red);
+    linear-gradient(90deg, #102f27dd 0%, #173d42c9 42%, #173d4280 65%, #173d4238 100%),
+    url("assets/mimi-encyclopedia-hero.webp");
+  background-position: center, center 54%;
+  background-size: cover;
+  border-bottom: 4px solid var(--gold);
 }
-.hero-inner { position: relative; max-width: 1320px; margin: auto; padding: 54px 24px 42px; }
+.hero-inner { position: relative; display: flex; min-height: 292px; max-width: 1320px; margin: auto; padding: 42px 24px 38px; flex-direction: column; justify-content: center; }
 .eyebrow { display: flex; gap: 13px; align-items: center; margin: 0 0 15px; color: #d7c394; font-size: .69rem; font-weight: 700; letter-spacing: .16em; }
 .eyebrow span:first-child { font-family: "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif; font-size: .88rem; letter-spacing: .04em; }
 .eyebrow span:last-child { padding-left: 13px; border-left: 1px solid #d7c39470; }
-.hero h1 { position: relative; z-index: 1; max-width: 760px; margin: 0; color: #fffaf0; font-family: "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif; font-size: clamp(2.45rem, 6vw, 4.7rem); font-weight: 600; letter-spacing: -.035em; line-height: 1.13; }
-.summary { position: relative; z-index: 1; margin: 14px 0 0; color: #e5e9dc; font-size: .98rem; }
-.hero-stamp { position: absolute; top: 50%; right: max(24px, calc((100vw - 1250px) / 2)); display: grid; width: 112px; height: 112px; place-content: center; justify-items: center; transform: translateY(-38%); border: 1px solid #f2dfbf99; border-radius: 50%; color: #fff3dc; background: #b64f3f; box-shadow: 0 0 0 7px #b64f3f22, 0 0 0 8px #f2dfbf50; }
-.hero-stamp span { font-family: "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif; font-size: 2.45rem; line-height: 1; }
-.hero-stamp small { margin-top: 5px; font-size: .55rem; letter-spacing: .2em; }
+.hero-brand { display: flex; min-width: 0; align-items: center; gap: clamp(12px, 2vw, 22px); }
+.hero-brand-logo { flex: 0 0 clamp(66px, 8.5vw, 112px); width: clamp(66px, 8.5vw, 112px); height: auto; filter: drop-shadow(0 5px 12px #0006); }
+.hero h1 { position: relative; z-index: 1; min-width: 0; max-width: 900px; margin: 0; color: #fffaf0; font-family: "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif; font-size: clamp(2rem, 4.5vw, 4rem); font-weight: 600; letter-spacing: -.035em; line-height: 1.08; }
+.summary { position: relative; z-index: 1; margin: 12px 0 0 calc(clamp(66px, 8.5vw, 112px) + clamp(12px, 2vw, 22px)); color: #e5e9dc; font-size: .98rem; }
 main { max-width: 1320px; margin: auto; padding: 25px 24px 40px; }
 .contribution-panel { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px 22px; align-items: center; margin: 0 0 18px; padding: 19px 21px; border: 1px solid #d8d5c7; border-radius: 14px; background: linear-gradient(110deg,#fffefa,#f0eee5); box-shadow: 0 6px 20px #30413b08; }
 .contribution-intro { max-width: 760px; }
@@ -229,11 +230,12 @@ dialog::backdrop { background: #15221fbb; }
 .related-photo span { font-size: .74rem; line-height: 1.35; overflow-wrap: anywhere; }
 footer { padding: 28px 18px; color: #738077; font-size: .73rem; text-align: center; }
 @media (max-width: 760px) {
-  .hero-inner { padding-top: 38px; padding-bottom: 32px; }
-  .hero-stamp { right: 23px; width: 70px; height: 70px; transform: translateY(-26%); }
-  .hero-stamp span { font-size: 1.65rem; }
-  .hero-stamp small { font-size: .43rem; }
-  .hero h1 { max-width: 80%; font-size: clamp(2rem, 8vw, 3.3rem); }
+  .hero { background-image: linear-gradient(90deg, #102f27e8 0%, #173d42d9 58%, #173d42a8 100%), url("assets/mimi-encyclopedia-hero.webp"); background-position: center, 68% center; }
+  .hero-inner { min-height: 250px; padding: 30px 20px 28px; }
+  .hero-brand { gap: 12px; }
+  .hero-brand-logo { flex-basis: 68px; width: 68px; }
+  .hero h1 { max-width: 100%; font-size: clamp(1.8rem, 7.3vw, 3rem); }
+  .summary { margin-left: 80px; font-size: .88rem; }
   .eyebrow { flex-wrap: wrap; gap: 7px; }
   .eyebrow span:last-child { padding-left: 9px; }
   main { padding: 18px 15px 30px; }
@@ -279,8 +281,9 @@ footer { padding: 28px 18px; color: #738077; font-size: .73rem; text-align: cent
   .bulk-tag-actions select { max-width: none; min-height: 44px; }
 }
 @media (max-width: 390px) {
-  .hero-stamp { top: 22px; right: 17px; transform: none; }
-  .hero h1 { max-width: 100%; padding-right: 52px; font-size: 2.05rem; }
+  .hero-brand-logo { flex-basis: 58px; width: 58px; }
+  .hero h1 { font-size: clamp(1.6rem, 7.3vw, 1.9rem); }
+  .summary { margin-left: 70px; }
   .eyebrow span:last-child { border-left: 0; padding-left: 0; }
   .gallery, .product-gallery { grid-template-columns: 1fr 1fr; gap: 8px; }
   .card img { height: 150px; }
