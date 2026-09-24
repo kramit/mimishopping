@@ -269,7 +269,7 @@ footer { padding: 28px 18px; color: #738077; font-size: .73rem; text-align: cent
   .product-card > picture img { height: 160px; }
   .review-queue summary { align-items: start; flex-direction: column; gap: 3px; }
   .review-queue-list { grid-template-columns: 1fr; }
-  .pagination { position: sticky; bottom: 8px; z-index: 1; width: fit-content; max-width: 100%; margin: 18px auto; padding: 7px; border: 1px solid var(--line); border-radius: 12px; background: #fffefaed; box-shadow: 0 3px 12px #20383b22; }
+  .pagination { position: static; width: fit-content; max-width: 100%; margin: 18px auto; padding: 7px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
   .pagination .button { min-height: 44px; }
   dialog { width: calc(100% - 14px); max-height: 95dvh; border-radius: 12px; }
   #detailContent { max-height: 95dvh; }
@@ -293,4 +293,3 @@ footer { padding: 28px 18px; color: #738077; font-size: .73rem; text-align: cent
   .product-card > picture img { height: 145px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } .inspection-frame { display: none; } .contribution-research-scene::before { position: absolute; inset: 0; background: url("assets/contribution-research-six-frame.webp") no-repeat 0 0 / 300% 200%; content: ""; } .contribution-progress-bar::after { left: 28%; width: 44%; animation: none; } }
-:root {
