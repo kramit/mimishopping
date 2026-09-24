@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {createHash} = require('node:crypto');
-const {createIntake, getIntake, retryIntake, publishIntake, getCatalogItems, hideCatalogItem, imageFormat, normalizeSubmission} = require('../src/functions/contributions');
+const {createIntake, getIntake, retryIntake, publishIntake, getCatalogItems, hideCatalogItem, updateCatalogAttribution, imageFormat, normalizeSubmission} = require('../src/functions/contributions');
 
 function context() { return {log() {}, warn() {}, error() {}}; }
 function request({headers = {}, params = {}, bytes, body, principal} = {}) {
@@ -177,6 +177,21 @@ test('only published contributions are exposed, and hiding requires the editor r
   const hidden = await hideCatalogItem(request({params: {id}, principal}), context(), {table, queue});
   assert.equal(hidden.status, 200);
   assert.equal(queue.messages.at(-1).type, 'remove');
+});
+
+test('changing a published contributor requires the editor role and updates public attribution', async () => {
+  const id = '9'.repeat(64);
+  const table = makeTable([{partitionKey: 'catalog', rowKey: id, status: 'published', uploaderName: 'Mike', publishedAt: '2026-09-24T10:00:00.000Z', catalogJson: JSON.stringify({id, uploadedBy: 'Mike', tags: ['toothpaste', 'Contributor: Mike']})}]);
+  const anonymous = await updateCatalogAttribution(request({params: {id}, body: {uploaderName: 'testing'}}), context(), {table});
+  assert.equal(anonymous.status, 403);
+  const principal = Buffer.from(JSON.stringify({userRoles: ['authenticated', 'catalog_editor']})).toString('base64');
+  const updated = await updateCatalogAttribution(request({params: {id}, body: {uploaderName: 'testing'}, principal}), context(), {table});
+  assert.equal(updated.status, 200);
+  assert.equal(updated.jsonBody.uploaderName, 'testing');
+  assert.equal(table.rows.get(id).uploaderName, 'testing');
+  const record = JSON.parse(table.rows.get(id).catalogJson);
+  assert.equal(record.uploadedBy, 'testing');
+  assert.deepEqual(record.tags, ['toothpaste', 'Contributor: testing']);
 });
 
 test('submission removes forged contributor tags and caps contributor display names', () => {

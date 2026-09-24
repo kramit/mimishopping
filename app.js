@@ -539,6 +539,32 @@
     tagEditor(x,info);
     if (canEditTags && x.isContribution) {
       const moderation=document.createElement('section');moderation.className='review-detail';
+      const attributionHeading=document.createElement('h3');attributionHeading.textContent='Contributor attribution';moderation.append(attributionHeading);
+      const attributionForm=document.createElement('form');attributionForm.className='tag-editor contribution-attribution-editor';
+      const attributionLabel=document.createElement('label');attributionLabel.textContent='Public contributor name';
+      const attributionInput=document.createElement('input');attributionInput.type='text';attributionInput.maxLength=48;attributionInput.required=true;attributionInput.value=x.uploadedBy||'';attributionLabel.append(attributionInput);
+      const attributionSave=document.createElement('button');attributionSave.type='submit';attributionSave.className='button button-quiet';attributionSave.textContent='Save contributor name';
+      attributionForm.append(attributionLabel,attributionSave);moderation.append(attributionForm);
+      attributionForm.addEventListener('submit',async event=>{
+        event.preventDefault();attributionSave.disabled=true;
+        const previousOverride=Object.hasOwn(tagOverrides,x.id)?[...tagOverrides[x.id]]:null;
+        const newName=attributionInput.value.trim();
+        try{
+          if(previousOverride){
+            const nextTags=normalizeTags([...previousOverride.filter(value=>!/^contributor\s*:/i.test(value)),`Contributor: ${newName}`]);
+            await saveSharedOverrides([{imageId:x.id,tags:nextTags}]);
+          }
+          const response=await fetch(`/api/catalog-items/${encodeURIComponent(x.id)}/attribution`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({uploaderName:newName})});
+          const payload=await response.json().catch(()=>({}));
+          if(!response.ok)throw new Error(payload.error||`Name update failed (${response.status}).`);
+          x.uploadedBy=payload.uploaderName;x.tags=payload.tags;x.publishedAt=payload.publishedAt||x.publishedAt;
+          refreshDerivedData();updateReviewLabel();renderTagTools();renderReviewQueue();render();detail.close();openDetail(x);
+          announce(`Contributor credit updated to ${x.uploadedBy}.`);
+        }catch(error){
+          if(previousOverride)await saveSharedOverrides([{imageId:x.id,tags:previousOverride}]).catch(()=>{});
+          announce(error.message||'The contributor name could not be updated.');attributionSave.disabled=false;
+        }
+      });
       const note=document.createElement('p');note.textContent='Hide this community contribution from the public catalog and remove its public photo.';
       const hide=document.createElement('button');hide.type='button';hide.className='button button-quiet';hide.textContent='Hide contribution';
       hide.addEventListener('click',async()=>{

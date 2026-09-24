@@ -322,6 +322,33 @@ async function hideCatalogItem(request, context, deps = {}) {
   }
 }
 
+async function updateCatalogAttribution(request, context, deps = {}) {
+  if (!isCatalogEditor(request.headers.get('x-ms-client-principal'))) return json(403, {error: 'Editor access is required.'});
+  const id = imageIdFrom(request);
+  if (!id) return json(400, {error: 'Invalid catalog item ID.'});
+  let body;
+  try { body = await request.json(); }
+  catch { return json(400, {error: 'Enter a contributor name.'}); }
+  let uploaderName;
+  try { uploaderName = normalizeDisplayName(body?.uploaderName); }
+  catch (error) { return json(400, {error: error.message}); }
+  const table = deps.table || getCatalogTableClient();
+  try {
+    const item = await getEntity(table, id);
+    if (!item || item.status !== 'published' || !item.catalogJson) return json(404, {error: 'Published contribution not found.'});
+    const record = JSON.parse(item.catalogJson);
+    record.uploadedBy = uploaderName;
+    record.tags = normalizeTags([...(Array.isArray(record.tags) ? record.tags.filter(tag => !/^contributor\s*:/i.test(tag)) : []), `Contributor: ${uploaderName}`]);
+    const updatedAt = new Date().toISOString();
+    await table.updateEntity({partitionKey: PARTITION, rowKey: id, uploaderName, catalogJson: JSON.stringify(record), updatedAt}, 'Merge', {etag: '*'});
+    return json(200, {id, uploaderName, tags: record.tags, publishedAt: item.publishedAt || ''});
+  } catch (error) {
+    if (error instanceof SyntaxError) return json(503, {error: 'The published catalog record is invalid.'});
+    context.error('Contribution attribution could not be updated.', error.code || statusCode(error) || 'unclassified');
+    return json(503, {error: 'The contributor name could not be updated. Try again shortly.'});
+  }
+}
+
 app.http('createCatalogIntake', {route: 'intakes', methods: ['POST'], authLevel: 'anonymous', handler: createIntake});
 app.http('getCatalogIntake', {route: 'intakes/{id}', methods: ['GET'], authLevel: 'anonymous', handler: getIntake});
 app.http('getCatalogIntakePreview', {route: 'intakes/{id}/preview', methods: ['GET'], authLevel: 'anonymous', handler: getIntakePreview});
@@ -329,5 +356,6 @@ app.http('retryCatalogIntake', {route: 'intakes/{id}/retry', methods: ['POST'], 
 app.http('publishCatalogIntake', {route: 'intakes/{id}/publish', methods: ['POST'], authLevel: 'anonymous', handler: publishIntake});
 app.http('getCatalogItems', {route: 'catalog-items', methods: ['GET'], authLevel: 'anonymous', handler: getCatalogItems});
 app.http('hideCatalogItem', {route: 'catalog-items/{id}/hide', methods: ['POST'], authLevel: 'anonymous', handler: hideCatalogItem});
+app.http('updateCatalogAttribution', {route: 'catalog-items/{id}/attribution', methods: ['PATCH'], authLevel: 'anonymous', handler: updateCatalogAttribution});
 
-module.exports = {MAX_UPLOAD_BYTES, createIntake, getIntake, getIntakePreview, retryIntake, publishIntake, getCatalogItems, hideCatalogItem, imageFormat, normalizeDisplayName, normalizeSubmission, safeFilename, tokenMatches};
+module.exports = {MAX_UPLOAD_BYTES, createIntake, getIntake, getIntakePreview, retryIntake, publishIntake, getCatalogItems, hideCatalogItem, updateCatalogAttribution, imageFormat, normalizeDisplayName, normalizeSubmission, safeFilename, tokenMatches};

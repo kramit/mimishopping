@@ -195,6 +195,7 @@ dialog::backdrop { background: #15221fbb; }
 .tag-editor { display: grid; gap: 9px; }
 .tag-editor label { display: grid; gap: 7px; color: #56675f; font-size: .78rem; font-weight: 700; }
 .tag-editor textarea { width: 100%; resize: vertical; padding: 10px; border: 1px solid #d9d6ca; border-radius: 8px; background: white; color: inherit; }
+.contribution-attribution-editor input { width: 100%; min-height: 42px; padding: 9px 10px; border: 1px solid #d9d6ca; border-radius: 8px; background: white; color: inherit; }
 .tag-editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .bulk-tag-editor { display: grid; gap: 9px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: #f8f7f0; }
 .bulk-tag-editor label { display: grid; gap: 7px; color: #56675f; font-size: .78rem; font-weight: 700; }
