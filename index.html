@@ -108,10 +108,13 @@
     <section class="tag-panel" aria-labelledby="tagCloudHeading">
       <div class="tag-panel-heading">
         <div><p class="section-kicker">EXPLORE THE COLLECTION</p><h2 id="tagCloudHeading">Browse by tag</h2></div>
-        <p id="tagCloudSummary" class="tag-cloud-summary"></p>
+        <button id="toggleTagCloud" class="button button-quiet tag-cloud-disclosure" type="button" aria-expanded="false" aria-controls="tagCloudContent">Show tags</button>
       </div>
-      <div id="tagCloud" class="tag-cloud" aria-label="Tag cloud"></div>
-      <button id="expandTagCloud" class="button button-quiet tag-cloud-toggle" type="button">Show all tags</button>
+      <div id="tagCloudContent" hidden>
+        <p id="tagCloudSummary" class="tag-cloud-summary"></p>
+        <div id="tagCloud" class="tag-cloud" aria-label="Tag cloud"></div>
+        <button id="expandTagCloud" class="button button-quiet tag-cloud-toggle" type="button">Show all tags</button>
+      </div>
     </section>
     <div class="view-controls" role="group" aria-label="Catalog view">
       <button id="photosViewButton" class="button button-primary" type="button" aria-pressed="true">Photos</button>

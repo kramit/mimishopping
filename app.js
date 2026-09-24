@@ -16,6 +16,7 @@
   let signedIn = false;
   let reviewChecks = readReviewChecks();
   let showAllTags = false;
+  let tagCloudExpanded = false;
   let currentView = 'photos';
   let currentPage = 0;
 
@@ -257,6 +258,10 @@
       cloud.append(button);
     }
     $('tagCloudSummary').textContent = showAllTags ? `All ${ranked.length} product tags · ${data.images.length} photos` : `Top 60 of ${ranked.length} product tags · ${data.images.length} photos`;
+    $('tagCloudContent').hidden = !tagCloudExpanded;
+    const cloudToggle = $('toggleTagCloud');
+    cloudToggle.setAttribute('aria-expanded', String(tagCloudExpanded));
+    cloudToggle.textContent = tagCloudExpanded ? 'Hide tags' : 'Show tags';
     const expand = $('expandTagCloud');
     expand.hidden = ranked.length <= 60;
     expand.textContent = showAllTags ? 'Show top tags' : `Show all ${ranked.length} tags`;
@@ -596,6 +601,7 @@
     announce(`Exported ${Object.keys(tagOverrides).length} tag override(s) and ${reviewChecks.size} local review check(s).`);
   }
   $('exportTags').addEventListener('click',exportEdits);
+  $('toggleTagCloud').addEventListener('click',()=>{tagCloudExpanded=!tagCloudExpanded;renderTagTools()});
   $('expandTagCloud').addEventListener('click',()=>{showAllTags=!showAllTags;renderTagTools()});
   $('importTags').addEventListener('click',()=>$('importTagsFile').click());
   $('importTagsFile').addEventListener('change',async event=>{

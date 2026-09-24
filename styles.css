@@ -132,10 +132,13 @@ main { max-width: 1320px; margin: auto; padding: 25px 24px 40px; }
 .review-detail { margin: 16px 0; padding: 11px 13px; border: 1px solid #e6dcc9; border-radius: 9px; background: #fffaf1; }
 .review-detail p { margin: 0 0 9px; color: var(--muted); font-size: .78rem; }
 .tag-panel { margin-top: 23px; padding: 18px 20px 19px; border: 1px solid var(--line); border-radius: 13px; background: #eeeee5; }
-.tag-panel-heading { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 13px; }
+.tag-panel-heading { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 0; }
+.tag-cloud-disclosure { flex: 0 0 auto; }
 .section-kicker { margin: 0 0 3px; color: #9c604c; font-size: .62rem; font-weight: 700; letter-spacing: .17em; }
 .tag-panel h2 { margin: 0; color: var(--ink); font-family: "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif; font-size: 1.45rem; font-weight: 600; }
 .tag-cloud-summary { margin: 0; color: var(--muted); font-size: .76rem; }
+#tagCloudContent[hidden] { display: none; }
+#tagCloudContent:not([hidden]) { padding-top: 13px; }
 .tag-cloud { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
 .tag-cloud-toggle { margin-top: 13px; }
 .cloud-tag { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid #ced6ca; border-radius: 999px; background: #fffefa; color: #315653; cursor: pointer; font-size: var(--tag-size, .8rem); line-height: 1.15; transition: color .15s, background .15s, border-color .15s; }
@@ -253,7 +256,8 @@ footer { padding: 28px 18px; color: #738077; font-size: .73rem; text-align: cent
   .tag-tools { width: 100%; }
   .tag-tools .button { flex: 1; min-height: 44px; }
   .tag-panel { padding: 15px; }
-  .tag-panel-heading { align-items: start; flex-direction: column; gap: 5px; }
+  .tag-panel-heading { align-items: center; flex-direction: row; gap: 10px; }
+  .tag-cloud-disclosure { min-height: 42px; padding-inline: 12px; }
   .cloud-tag { min-height: 40px; }
   .view-controls { display: grid; grid-template-columns: 1fr 1fr; }
   .view-controls .button { min-height: 44px; }
