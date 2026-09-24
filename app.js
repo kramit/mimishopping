@@ -598,21 +598,24 @@
       if(!response.ok)return;
       const payload=await response.json();
       const existing=new Set(data.images.map(image=>image.id));
-      for(const image of Array.isArray(payload.images)?payload.images:[]){
-        if(!image?.id||existing.has(image.id))continue;
-        data.images.push(image);existing.add(image.id);
-      }
+      for(const image of Array.isArray(payload.images)?payload.images:[])if(image?.id&&!existing.has(image.id)){data.images.push(image);existing.add(image.id);imageIds.add(image.id)}
+      orderCommunityImagesFirst();
       refreshDerivedData();updateReviewLabel();renderTagTools();renderReviewQueue();render();
     }catch{}
+  }
+
+  function orderCommunityImagesFirst() {
+    const community=data.images.filter(image=>image.isContribution)
+      .sort((a,b)=>String(b.publishedAt||b.capturedDate||'').localeCompare(String(a.publishedAt||a.capturedDate||'')));
+    const archive=data.images.filter(image=>!image.isContribution);
+    data.images.splice(0,data.images.length,...community,...archive);
   }
 
   window.addEventListener('mimi-catalog-item-published',event=>{
     const image=event.detail;
     if(!image?.id||imageIds.has(image.id))return;
-    data.images.push(image);refreshDerivedData();updateReviewLabel();
-    category.value='';trip.value='';year.value='';researchStatus.value='';needsReview.checked=false;
-    search.value=image.uploadedBy||'';
-    tag.value=(image.tags||[]).find(value=>/^Contributor:/i.test(value))||'';
+    data.images.push(image);imageIds.add(image.id);orderCommunityImagesFirst();refreshDerivedData();updateReviewLabel();
+    category.value='';trip.value='';year.value='';researchStatus.value='';needsReview.checked=false;search.value='';tag.value='';
     currentView='photos';currentPage=0;
     $('photosViewButton').className='button button-primary';$('productsViewButton').className='button button-quiet';
     $('photosViewButton').setAttribute('aria-pressed','true');$('productsViewButton').setAttribute('aria-pressed','false');

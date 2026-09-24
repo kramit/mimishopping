@@ -206,7 +206,7 @@ async function getIntake(request, context, deps = {}) {
     if (item.expiresAt <= new Date().toISOString()) return json(410, {error: 'This upload has expired. Upload the photo again to continue.'});
     let result = null;
     try { result = item.catalogJson ? JSON.parse(item.catalogJson) : null; } catch {}
-    return json(200, {id, status: item.status, filename: item.filename, expiresAt: item.expiresAt, result, error: item.lastError || null});
+    return json(200, {id, status: item.status, filename: item.filename, expiresAt: item.expiresAt, retryAction: item.retryAction || '', result, error: item.lastError || null});
   } catch (error) {
     context.error('Private catalog result could not be read.', error.code || statusCode(error) || 'unclassified');
     return json(503, {error: 'The private result is temporarily unavailable.'});
@@ -293,9 +293,10 @@ async function getCatalogItems(_request, context, deps = {}) {
     const images = [];
     for await (const entity of table.listEntities({queryOptions: {filter: "status eq 'published'"}})) {
       if (entity.status !== 'published' || !entity.catalogJson) continue;
-      try { images.push(JSON.parse(entity.catalogJson)); }
+      try { images.push({...JSON.parse(entity.catalogJson), publishedAt: entity.publishedAt || ''}); }
       catch { context.error('Skipping a malformed published catalog row.', entity.rowKey); }
     }
+    images.sort((a,b) => String(b.publishedAt || b.capturedDate || '').localeCompare(String(a.publishedAt || a.capturedDate || '')));
     return json(200, {images}, 'no-store');
   } catch (error) {
     context.error('Published contributions could not be read.', error.code || statusCode(error) || 'unclassified');

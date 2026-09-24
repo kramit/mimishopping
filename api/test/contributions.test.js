@@ -63,6 +63,9 @@ test('anonymous intake stores the image privately and returns a token-gated draf
   const authorized = await getIntake(request({params: {id: hash(png)}, headers: {'x-catalog-draft-token': response.jsonBody.token}}), context(), {table});
   assert.equal(authorized.status, 200);
   assert.equal(authorized.jsonBody.status, 'queued');
+  table.rows.get(hash(png)).retryAction = 'publish';
+  const retryable = await getIntake(request({params: {id: hash(png)}, headers: {'x-catalog-draft-token': response.jsonBody.token}}), context(), {table});
+  assert.equal(retryable.jsonBody.retryAction, 'publish');
 });
 
 test('oversized uploads and invalid signatures are rejected before storage', async () => {
@@ -161,10 +164,12 @@ test('submit requires a ready result and contributor name, then adds an attribut
 test('only published contributions are exposed, and hiding requires the editor role', async () => {
   const id = 'c'.repeat(64), table = makeTable([
     {partitionKey: 'catalog', rowKey: 'd'.repeat(64), status: 'ready', catalogJson: '{}'},
-    {partitionKey: 'catalog', rowKey: id, status: 'published', catalogJson: JSON.stringify({id})}
+    {partitionKey: 'catalog', rowKey: id, status: 'published', publishedAt: '2026-09-23T10:00:00.000Z', catalogJson: JSON.stringify({id})},
+    {partitionKey: 'catalog', rowKey: 'e'.repeat(64), status: 'published', publishedAt: '2026-09-24T10:00:00.000Z', catalogJson: JSON.stringify({id: 'e'.repeat(64)})}
   ]);
   const publicItems = await getCatalogItems({}, context(), {table});
-  assert.deepEqual(publicItems.jsonBody.images.map(item => item.id), [id]);
+  assert.deepEqual(publicItems.jsonBody.images.map(item => item.id), ['e'.repeat(64), id]);
+  assert.equal(publicItems.jsonBody.images[0].publishedAt, '2026-09-24T10:00:00.000Z');
   const queue = makeQueue();
   const anonymous = await hideCatalogItem(request({params: {id}}), context(), {table, queue});
   assert.equal(anonymous.status, 403);
