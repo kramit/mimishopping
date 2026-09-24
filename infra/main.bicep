@@ -51,6 +51,7 @@ resource site 'Microsoft.Web/staticSites@2022-09-01' = {
   name: staticWebAppName
   location: location
   sku: { name: 'Free', tier: 'Free' }
+  properties: {}
   tags: { application: 'MimisJapanShopping', managedBy: 'Bicep' }
 }
 
