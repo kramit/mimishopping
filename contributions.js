@@ -294,7 +294,8 @@
     const wasActive = active?.id === id;
     if (id) forgetDraft(id);
     if (wasActive) {
-      form.hidden = true;
+      clearResult();
+      setPreview('');
       setActivity(false);
       setStatus('Added to the catalog. It is now the first photo in the collection.');
     }
