@@ -225,6 +225,13 @@
   $('tagStorageHint').textContent = 'Loading shared tag edits…';
   updateReviewLabel();
 
+  function selectTag(value) {
+    tag.value = tag.value === value ? '' : value;
+    currentPage = 0;
+    renderTagTools();
+    render();
+  }
+
   function renderTagTools() {
     const selected = tag.value;
     const counts = new Map();
@@ -246,7 +253,7 @@
       button.style.setProperty('--tag-size', `${12 + Math.min(9, Math.log2(count + 1) * 2.1)}px`);
       button.append(document.createTextNode(value));
       const total = document.createElement('span'); total.className = 'cloud-count'; total.textContent = String(count); button.append(total);
-      button.addEventListener('click', () => { tag.value = tag.value === value ? '' : value; currentPage=0; renderTagTools(); render(); });
+      button.addEventListener('click', () => selectTag(value));
       cloud.append(button);
     }
     $('tagCloudSummary').textContent = showAllTags ? `All ${ranked.length} product tags · ${data.images.length} photos` : `Top 60 of ${ranked.length} product tags · ${data.images.length} photos`;
@@ -269,18 +276,36 @@
       (!needsReview.checked || (needsAttention(x) && !reviewChecks.has(x.id)));
   }
   function card(x) {
-    const el = document.createElement('article'); el.className = 'card'; el.tabIndex = 0; el.setAttribute('role','button');
+    const el = document.createElement('article'); el.className = 'card';
+    const preview=document.createElement('button');preview.type='button';preview.className='card-preview';
     const picture = responsiveImage(x, 'thumb', x.description || x.filename); const img=picture.querySelector('img'); img.loading = 'lazy';
     const body = document.createElement('div'); body.className = 'card-body';
     const title = (x.products||[]).map(p=>p.name).filter(Boolean).slice(0,2).join(' · ') || x.description || 'Catalog review pending';
     const heading = document.createElement('p'); heading.className='card-title'; heading.textContent=title;
     const meta = document.createElement('div'); meta.className='meta'; meta.textContent=[x.trip,x.category,x.uploadedBy?`Contributed by ${x.uploadedBy}`:'',x.filename].filter(Boolean).join(' · ');
     body.append(heading,meta);
+    preview.setAttribute('aria-label',`Open image details: ${title}`);
+    preview.append(picture,body);
+    const extras=document.createElement('div');extras.className='card-extras';
     const tags = effectiveTags(x);
-    if (tags.length) {const chips=document.createElement('div');chips.className='chips';tags.slice(0,5).forEach(t=>{const c=document.createElement('span');c.className='chip';c.textContent=t;chips.append(c)});body.append(chips)}
-    addResearchBadges(body,imageResearchStatuses(x));
-    if (['needs human review','needs closer inspection'].includes(x.reviewStatus)) {const s=document.createElement('div');s.className='status';s.textContent=x.reviewStatus;body.append(s)}
-    el.append(picture,body); el.addEventListener('click',()=>openDetail(x)); el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openDetail(x)}}); return el;
+    if (tags.length) {
+      const chips=document.createElement('div');chips.className='chips';
+      tags.slice(0,5).forEach(t=>{
+        const c=document.createElement('button');c.type='button';c.className='chip chip-button';c.textContent=t;
+        c.setAttribute('aria-label',`Filter photos by tag: ${t}`);
+        c.setAttribute('aria-pressed',String(tag.value===t));
+        c.addEventListener('click',event=>{event.stopPropagation();selectTag(t)});
+        c.addEventListener('keydown',event=>event.stopPropagation());
+        chips.append(c);
+      });
+      extras.append(chips);
+    }
+    addResearchBadges(extras,imageResearchStatuses(x));
+    if (['needs human review','needs closer inspection'].includes(x.reviewStatus)) {const s=document.createElement('div');s.className='status';s.textContent=x.reviewStatus;extras.append(s)}
+    el.append(preview,extras);
+    preview.addEventListener('click',()=>openDetail(x));
+    el.addEventListener('click',event=>{if(!event.target.closest('button'))openDetail(x)});
+    return el;
   }
   function productCard(group) {
     const el=document.createElement('article');el.className='product-card';
@@ -460,7 +485,7 @@
     } catch(error) { announce(error.message); }
   }
   function openProductDetail(group) {
-    const holder=$('detailContent');holder.replaceChildren();
+    const holder=$('detailContent');holder.replaceChildren();holder.scrollTop=0;
     const representative=group.images[0];
     const image=responsiveImage(representative,'display',productTitle(group.product),'detail-image');
     const info=document.createElement('div');info.className='detail-info product-detail-info';
@@ -495,7 +520,7 @@
     info.append(photoGrid);holder.append(image,info);if(!detail.open)detail.showModal();
   }
   function openDetail(x) {
-    const holder=$('detailContent'); holder.replaceChildren();
+    const holder=$('detailContent'); holder.replaceChildren();holder.scrollTop=0;
     holder.dataset.imageId=x.id;
     const image=responsiveImage(x,'display',x.description||x.filename,'detail-image');
     const info=document.createElement('div'); info.className='detail-info';
@@ -596,7 +621,7 @@
 
   $('closeDetail').addEventListener('click',()=>detail.close()); detail.addEventListener('click',e=>{if(e.target===detail)detail.close()});
   search.addEventListener('input',()=>{currentPage=0;render()});
-  [category,tag,trip,year,researchStatus,needsReview].forEach(el=>el.addEventListener('change',()=>{currentPage=0;render()}));
+  [category,tag,trip,year,researchStatus,needsReview].forEach(el=>el.addEventListener('change',()=>{currentPage=0;if(el===tag)renderTagTools();render()}));
   $('photosViewButton').addEventListener('click',()=>{currentView='photos';currentPage=0;$('photosViewButton').className='button button-primary';$('productsViewButton').className='button button-quiet';$('photosViewButton').setAttribute('aria-pressed','true');$('productsViewButton').setAttribute('aria-pressed','false');render()});
   $('productsViewButton').addEventListener('click',()=>{currentView='products';currentPage=0;$('productsViewButton').className='button button-primary';$('photosViewButton').className='button button-quiet';$('productsViewButton').setAttribute('aria-pressed','true');$('photosViewButton').setAttribute('aria-pressed','false');render()});
   $('previousPage').addEventListener('click',()=>{if(currentPage>0){currentPage--;render()}});
