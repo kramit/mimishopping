@@ -39,12 +39,17 @@
     activityFrames.forEach((frame, frameIndex) => frame.classList.toggle('is-active', frameIndex === index));
   }
   function setActivity(active) {
-    activity.hidden = !active;
+    const shouldShow = Boolean(active);
+    if (activity.hidden === !shouldShow) return;
+    activity.hidden = !shouldShow;
     clearInterval(activityTimer); activityTimer = 0;
     showActivityFrame(0);
-    if (active && activityFrames.length > 1 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (shouldShow && activityFrames.length > 1 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       activityTimer = window.setInterval(() => showActivityFrame((activityFrame + 1) % activityFrames.length), 4000);
     }
+  }
+  function syncActivity() {
+    setActivity([...drafts.values()].some(draft => ['queued', 'processing'].includes(draft.status)));
   }
   function parseTags(value) {
     const seen = new Set();
@@ -80,6 +85,7 @@
     drafts.set(saved.id, saved);
     if (active?.id === saved.id) active = saved;
     saveDrafts();
+    syncActivity();
     renderDraftList();
     scheduleRefresh();
     return saved;
@@ -88,6 +94,7 @@
     drafts.delete(id);
     if (active?.id === id) active = null;
     saveDrafts();
+    syncActivity();
     renderDraftList();
   }
   async function photoId(file) {
@@ -536,7 +543,7 @@
 
   function setPublishStatus(message,reveal=false){publishStatus.hidden=false;publishStatus.textContent=message;if(reveal)publishStatus.scrollIntoView({block:'nearest',behavior:'smooth'});}
 
-  restoreDrafts();renderDraftList();
+  restoreDrafts();renderDraftList();syncActivity();
   if(drafts.size){showFlow();setStatus('Restoring private uploads from this browser…');refreshDrafts();}
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshDrafts();});
 })();
