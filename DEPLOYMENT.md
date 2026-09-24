@@ -8,6 +8,10 @@
 - Storage: StorageV2, Standard LRS, Hot tier, HTTPS only, TLS 1.2; `gallery` Blob container exposes anonymous blob reads but not container listing. The `TagOverrides` Table is private.
 - The photos and the catalog/research text are public. Do not store credentials or private notes in `catalog-data.js`.
 
+## Custom domain
+
+The public gallery is also available at `https://mimishop.michaelwhitehouse.net`. The Static Web App custom-domain binding is represented by `siteCustomDomain` in `infra/main.bicep`; set `customDomainName` when deploying a different hostname. The `michaelwhitehouse.net` Azure DNS zone is in the Visual Studio A subscription, resource group `mikenet`, while the Static Web App is in the Visual Studio B subscription, resource group `webapps`. Its `mimishop` CNAME points to the Static Web App's `defaultHostname` output. Keep the DNS record and custom-domain binding when redeploying; Azure provisions the HTTPS certificate after validation.
+
 Provision the resource group, then run `infra/main.bicep` with the storage and Static Web App names. The template can create a monthly resource-group budget of 5 billing-currency units with 80% and 100% notifications by setting `enableCostBudget=true` and supplying `budgetContactEmail`. Azure rejected budgets for this Visual Studio subscription's offer type, so the feature defaults off here. Grant the deploying user `Storage Blob Data Contributor` on the storage account. Set `TABLE_ENDPOINT` and `TABLE_SAS_TOKEN` in the Static Web App's API application settings; neither belongs in this repository. The Function SAS must be scoped to `TagOverrides`, HTTPS-only, and limited to read/query, add, update, and delete.
 
 ## GitHub deployment

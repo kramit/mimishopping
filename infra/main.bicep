@@ -6,6 +6,8 @@ param location string = resourceGroup().location
 @maxLength(24)
 param storageAccountName string
 param staticWebAppName string
+@description('Public hostname routed to the Static Web App; create its DNS CNAME in the authoritative zone first.')
+param customDomainName string = 'mimishop.michaelwhitehouse.net'
 @description('Globally unique Function App name for asynchronous catalog work.')
 param catalogFunctionAppName string
 @description('Globally unique LRS storage account used only for Function host and deployment data.')
@@ -117,6 +119,14 @@ resource deploymentContainer 'Microsoft.Storage/storageAccounts/blobServices/con
 
 resource site 'Microsoft.Web/staticSites@2022-09-01' existing = {
   name: staticWebAppName
+}
+
+resource siteCustomDomain 'Microsoft.Web/staticSites/customDomains@2022-09-01' = {
+  parent: site
+  name: customDomainName
+  properties: {
+    validationMethod: 'cname-delegation'
+  }
 }
 
 resource workerPlan 'Microsoft.Web/serverfarms@2024-04-01' = {
@@ -292,6 +302,7 @@ output blobEndpoint string = storage.properties.primaryEndpoints.blob
 output tableEndpoint string = storage.properties.primaryEndpoints.table
 output staticWebAppName string = site.name
 output staticWebAppHostname string = site.properties.defaultHostname
+output customDomainHostname string = siteCustomDomain.name
 output catalogFunctionAppName string = worker.name
 output workerPrincipalId string = worker.identity.principalId
 output functionHostStorageName string = workerHostStorage.name
