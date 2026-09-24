@@ -7,6 +7,7 @@
   const MAX_BYTES = 24 * 1024 * 1024;
   const sessionKey = 'mimi-japan-contribution-draft-v1';
   const status = $('contributionStatus');
+  const activity = $('contributionActivity');
   const preview = $('contributionPreview');
   const result = $('contributionResult');
   const form = $('contributionPublishForm');
@@ -21,6 +22,7 @@
   let polling = false;
 
   function setStatus(message) { status.textContent = message; }
+  function setActivity(active) { activity.hidden = !active; }
   function parseTags(value) {
     const seen = new Set();
     return String(value || '').split(/[\n,;]/).map(tag => tag.trim().replace(/\s+/g, ' ').slice(0, 64)).filter(tag => {
@@ -174,6 +176,7 @@
   async function pollUntilReady() {
     if (polling || !active) return;
     polling = true; showFlow();
+    setActivity(true);
     const started = Date.now();
     try {
       while (Date.now() - started < 12 * 60 * 1000) {
@@ -181,6 +184,7 @@
         active.status = item.status;
         saveSession();
         if (item.status === 'ready' && item.result) {
+          setActivity(false);
           active.result = item.result; saveSession();
           await fetchPrivatePreview();
           renderFullResult(item.result);
@@ -188,19 +192,23 @@
           polling = false; return;
         }
         if (item.status === 'published') {
+          setActivity(false);
           setStatus('This photo has already been added to the catalog.');
           form.hidden = true; active = null; pending = null; saveSession(); polling = false; return;
         }
         if (['failed', 'upload-failed', 'queue-failed'].includes(item.status)) {
+          setActivity(false);
           setStatus(item.error || 'Processing needs a retry. Your photo is still private.');
           retryButton.hidden = false; form.hidden = true; polling = false; return;
         }
         setStatus(item.status === 'processing' ? 'Identifying the products and researching current product pages…' : 'Photo received. Waiting for analysis…');
         await new Promise(resolve => setTimeout(resolve, 3500));
       }
+      setActivity(false);
       setStatus('Analysis is taking longer than expected. Your draft is saved in this browser; reload the page to check it again.');
       retryButton.hidden = true;
     } catch (error) {
+      setActivity(false);
       setStatus(error.message === 'This private upload is unavailable.'
         ? 'The upload session could not be found. Choose the same photo again to resume, or choose another photo to start a new upload.'
         : error.message || 'The private result could not be loaded.');
@@ -209,6 +217,7 @@
   }
 
   async function beginUpload(file) {
+    setActivity(false);
     clearResult();
     showFlow();
     const localPreview = URL.createObjectURL(file);

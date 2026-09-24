@@ -42,6 +42,8 @@ The public app uses the following Static Web Apps API settings for intake: `CATA
 
 The worker app settings are managed by Bicep: `CATALOG_TABLE_ENDPOINT`, `CATALOG_TABLE_NAME`, `CATALOG_BLOB_ENDPOINT`, `CATALOG_INTAKE_CONTAINER`, `CATALOG_PUBLIC_CONTAINER`, `CATALOG_QUEUE_NAME`, `CatalogQueue__queueServiceUri`, `CatalogQueue__credential`, `FOUNDRY_PROJECT_ENDPOINT`, and `FOUNDRY_AGENT_NAME`. The worker uses managed identity for these services, not SAS keys. Assign **Foundry Agent Consumer** to the Function App identity at the individual `mimishopping` agent scope. Keep the agent version pinned to a tested version; never route the production endpoint to `latest` automatically.
 
+The API writes plain JSON through the Azure Storage Queues JavaScript SDK. `worker/host.json` sets `extensions.queues.messageEncoding` to `none` to match those messages; the Queue extension defaults to `base64` and rejects raw messages before the function handler runs. Keep the producer and host setting aligned.
+
 ### First deployment and verification
 
 1. Build and inspect the Bicep change, then deploy the infrastructure in `webapps` with the existing gallery Storage and Static Web App names and a dedicated Flex Consumption Function App plus host-storage account. The template creates the inbox, public contributions container, Table, queues, Function App, and scoped storage role assignments. Confirm the what-if does not delete or replace the existing gallery assets.

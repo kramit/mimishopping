@@ -190,6 +190,16 @@ resource workerHostBlobRole 'Microsoft.Authorization/roleAssignments@2022-04-01'
   }
 }
 
+resource workerHostQueueRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(workerHostStorage.id, worker.id, queueDataContributorRoleId)
+  scope: workerHostStorage
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', queueDataContributorRoleId)
+    principalId: worker.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 resource workerDeploymentBlobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(deploymentContainer.id, worker.id, blobDataContributorRoleId)
   scope: deploymentContainer

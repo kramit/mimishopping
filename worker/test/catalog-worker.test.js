@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {createHash} = require('node:crypto');
 const sharp = require('sharp');
+const hostConfig = require('../host.json');
 const {normalizeAgentResult, normalizeWebResearch, responseText, itemId, processImage, publishImage, expireDrafts, normalizeImages} = require('../src/catalog-worker');
 
 function sha(value) { return createHash('sha256').update(value).digest('hex'); }
@@ -60,6 +61,11 @@ test('Responses output parsing and queue message validation handle supported pay
   assert.equal(responseText({output: [{type: 'message', content: [{type: 'output_text', text: 'result'}]}]}), 'result');
   assert.deepEqual(itemId(JSON.stringify({type: 'process', id: 'A'.repeat(64)})), {type: 'process', id: 'a'.repeat(64)});
   assert.throws(() => itemId({type: 'other', id: 'a'.repeat(64)}), /Invalid/);
+});
+
+test('Functions reads raw JSON messages sent by the Azure Queue SDK', () => {
+  assert.equal(hostConfig.extensions.queues.messageEncoding, 'none');
+  assert.deepEqual(itemId(JSON.stringify({type: 'process', id: 'a'.repeat(64)})), {type: 'process', id: 'a'.repeat(64)});
 });
 
 test('processing strips photo metadata and publication verifies actual blob hashes', async () => {
