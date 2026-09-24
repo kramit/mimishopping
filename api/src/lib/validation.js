@@ -1,4 +1,4 @@
-const IMAGE_ID = /^[a-f0-9]{16}$/i;
+const IMAGE_ID = /^(?:[a-f0-9]{16}|[a-f0-9]{64})$/i;
 const MAX_BATCH = 25;
 const MAX_TAGS = 80;
 const MAX_TAG_LENGTH = 64;

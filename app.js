@@ -48,9 +48,9 @@
     const raw = String(path || '');
     if (/^https?:\/\//i.test(raw)) return raw;
     const relative = raw.replace(/^(\.\.\/)+/, '');
-    const mappings = [['Photos/', 'photos/'], ['Catalog/thumbnails/', 'thumbnails/'], ['Catalog/previews/', 'previews/']];
+    const mappings = [['Photos/', 'photos/', window.MIMI_ASSET_BASE], ['Catalog/thumbnails/', 'thumbnails/', window.MIMI_ASSET_BASE], ['Catalog/previews/', 'previews/', window.MIMI_ASSET_BASE], ['Contributions/', '', window.MIMI_CONTRIBUTION_ASSET_BASE]];
     const mapping = mappings.find(([prefix]) => relative.startsWith(prefix));
-    const base = String(window.MIMI_ASSET_BASE || '').replace(/\/+$/, '');
+    const base = String(mapping?.[2] || '').replace(/\/+$/, '');
     if (!base || !mapping) return raw;
     const objectPath = mapping[1] + relative.slice(mapping[0].length);
     return `${base}/${objectPath.split('/').map(encodeURIComponent).join('/')}`;
@@ -69,6 +69,18 @@
   function updateReviewLabel() {
     const open=data.images.filter(x=>needsAttention(x)&&!reviewChecks.has(x.id)).length;
     $('reviewToggleLabel').textContent=`Photo review only (${open} open)`;
+  }
+  function refreshDerivedData() {
+    productGroups = buildProductGroups(data.images);
+    browseTagCount = new Set(data.images.flatMap(x => (x.tags || []).filter(tag => !/^Contributor:/i.test(tag)))).size;
+    $('summary').textContent = `${data.images.length} photos · ${productGroups.length} product groups · ${browseTagCount} browse tags`;
+    const knownTrips = new Set([...trip.options].map(option => option.value));
+    for (const image of data.images) {
+      imageIds.add(image.id);
+      const label = image.trip || (image.year ? `${image.year} · date unknown` : 'Date unknown');
+      if (!knownTrips.has(label)) { trip.add(new Option(label, label)); knownTrips.add(label); }
+      if (image.year && ![...year.options].some(option => option.value === image.year)) year.add(new Option(image.year, image.year));
+    }
   }
   function effectiveTags(image) {
     return Object.prototype.hasOwnProperty.call(tagOverrides, image.id) ? tagOverrides[image.id] : (image.tags || []);
@@ -156,8 +168,8 @@
   function productTitle(product) {
     return [product.brand,product.name,product.variant].filter(Boolean).join(' — ') || product.description || 'Unidentified product';
   }
-  const productGroups = buildProductGroups(data.images);
-  const browseTagCount = new Set(data.images.flatMap(x => x.tags || [])).size;
+  let productGroups = buildProductGroups(data.images);
+  let browseTagCount = new Set(data.images.flatMap(x => (x.tags || []).filter(tag => !/^Contributor:/i.test(tag)))).size;
   const researchLabels = {matched:'Matched',partial:'Partial',pending:'Pending',unmatched:'No match'};
   function imageResearchStatuses(image) {
     const statuses=unique((image.products || []).map(p => p.webResearch?.status || 'pending'))
@@ -199,7 +211,7 @@
 
     const cloud = $('tagCloud');
     cloud.replaceChildren();
-    const ranked = [...counts.entries()].sort((a,b) => b[1]-a[1] || a[0].localeCompare(b[0]));
+    const ranked = [...counts.entries()].filter(([value]) => !/^Contributor:/i.test(value)).sort((a,b) => b[1]-a[1] || a[0].localeCompare(b[0]));
     const visible = showAllTags ? ranked : ranked.slice(0,60);
     if (tag.value && !visible.some(([value]) => value === tag.value)) visible.push([tag.value,counts.get(tag.value)]);
     for (const [value,count] of visible) {
@@ -212,15 +224,15 @@
       button.addEventListener('click', () => { tag.value = tag.value === value ? '' : value; currentPage=0; renderTagTools(); render(); });
       cloud.append(button);
     }
-    $('tagCloudSummary').textContent = showAllTags ? `All ${values.length} tags · ${data.images.length} photos` : `Top 60 of ${values.length} tags · ${data.images.length} photos`;
+    $('tagCloudSummary').textContent = showAllTags ? `All ${ranked.length} product tags · ${data.images.length} photos` : `Top 60 of ${ranked.length} product tags · ${data.images.length} photos`;
     const expand = $('expandTagCloud');
-    expand.hidden = values.length <= 60;
-    expand.textContent = showAllTags ? 'Show top tags' : `Show all ${values.length} tags`;
+    expand.hidden = ranked.length <= 60;
+    expand.textContent = showAllTags ? 'Show top tags' : `Show all ${ranked.length} tags`;
   }
 
   function matches(x) {
     const q = clean(search.value).trim(), tags = effectiveTags(x);
-    const haystack = clean([x.filename,x.description,x.category,x.year,...tags,...(x.searchTerms||[]),...(x.products||[]).flatMap(p=>[
+    const haystack = clean([x.filename,x.description,x.category,x.year,x.uploadedBy,...tags,...(x.searchTerms||[]),...(x.products||[]).flatMap(p=>[
       p.name,p.brand,p.variant,p.description,p.webResearch?.productSummary,p.webResearch?.reviewSummary?.summary,
       p.webResearch?.observedPrice,p.webResearch?.statusNote,
       ...(p.webResearch?.stores||[]).map(s=>s.name),...(p.webResearch?.translations||[]).flatMap(t=>[t.text,t.english])
@@ -237,7 +249,7 @@
     const body = document.createElement('div'); body.className = 'card-body';
     const title = (x.products||[]).map(p=>p.name).filter(Boolean).slice(0,2).join(' · ') || x.description || 'Catalog review pending';
     const heading = document.createElement('p'); heading.className='card-title'; heading.textContent=title;
-    const meta = document.createElement('div'); meta.className='meta'; meta.textContent=[x.trip,x.category,x.filename].filter(Boolean).join(' · ');
+    const meta = document.createElement('div'); meta.className='meta'; meta.textContent=[x.trip,x.category,x.uploadedBy?`Contributed by ${x.uploadedBy}`:'',x.filename].filter(Boolean).join(' · ');
     body.append(heading,meta);
     const tags = effectiveTags(x);
     if (tags.length) {const chips=document.createElement('div');chips.className='chips';tags.slice(0,5).forEach(t=>{const c=document.createElement('span');c.className='chip';c.textContent=t;chips.append(c)});body.append(chips)}
@@ -462,7 +474,7 @@
     const image=document.createElement('img'); image.className='detail-image'; image.src=assetUrl(x.image); image.alt=x.description||x.filename;
     const info=document.createElement('div'); info.className='detail-info';
     const h=document.createElement('h2'); h.textContent=(x.products||[]).map(p=>p.name).filter(Boolean).join(' · ')||'Image details'; info.append(h);
-    const p=document.createElement('p'); p.className='detail-meta'; p.textContent=[x.trip,x.category,x.filename].filter(Boolean).join(' · '); info.append(p);
+    const p=document.createElement('p'); p.className='detail-meta'; p.textContent=[x.trip,x.category,x.uploadedBy?`Contributed by ${x.uploadedBy}`:'',x.filename].filter(Boolean).join(' · '); info.append(p);
     if(x.description){const d=document.createElement('p');d.textContent=x.description;info.append(d)}
     if(needsAttention(x)){
       const review=document.createElement('section');review.className='review-detail';
@@ -473,6 +485,25 @@
       review.append(note,button);info.append(review);
     }
     tagEditor(x,info);
+    if (canEditTags && x.isContribution) {
+      const moderation=document.createElement('section');moderation.className='review-detail';
+      const note=document.createElement('p');note.textContent='Hide this community contribution from the public catalog and remove its public photo.';
+      const hide=document.createElement('button');hide.type='button';hide.className='button button-quiet';hide.textContent='Hide contribution';
+      hide.addEventListener('click',async()=>{
+        if(!window.confirm('Hide this contribution from the catalog and remove its photo?'))return;
+        hide.disabled=true;
+        try{
+          const response=await fetch(`/api/catalog-items/${encodeURIComponent(x.id)}/hide`,{method:'POST'});
+          const payload=await response.json().catch(()=>({}));
+          if(!response.ok)throw new Error(payload.error||`Hide failed (${response.status}).`);
+          const index=data.images.findIndex(image=>image.id===x.id);if(index>=0)data.images.splice(index,1);
+          imageIds.delete(x.id);delete tagOverrides[x.id];delete overrideEtags[x.id];saveOverrides();
+          refreshDerivedData();updateReviewLabel();detail.close();renderTagTools();renderReviewQueue();render();
+          announce('Contribution hidden from the catalog.');
+        }catch(error){announce(error.message);hide.disabled=false;}
+      });
+      moderation.append(note,hide);info.append(moderation);
+    }
     if(x.products?.length){const head=document.createElement('h3');head.textContent='Products';info.append(head);const list=document.createElement('div');list.className='product-list';x.products.forEach(v=>list.append(productBlock(v)));info.append(list)}
     if(x.japaneseText?.length){const head=document.createElement('h3');head.textContent='Japanese packaging text with English translations';info.append(head);x.japaneseText.forEach(v=>{const line=document.createElement('p');line.className='translation';line.textContent=[v.text,v.translation].filter(Boolean).join(' — ');info.append(line)})}
     // Raw OCR is retained for internal search, but can contain untranslated Japanese.
@@ -509,6 +540,33 @@
     event.target.value='';
   });
 
+  async function loadCommunityCatalog() {
+    try {
+      const response=await fetch('/api/catalog-items',{cache:'no-store'});
+      if(!response.ok)return;
+      const payload=await response.json();
+      const existing=new Set(data.images.map(image=>image.id));
+      for(const image of Array.isArray(payload.images)?payload.images:[]){
+        if(!image?.id||existing.has(image.id))continue;
+        data.images.push(image);existing.add(image.id);
+      }
+      refreshDerivedData();updateReviewLabel();renderTagTools();renderReviewQueue();render();
+    }catch{}
+  }
+
+  window.addEventListener('mimi-catalog-item-published',event=>{
+    const image=event.detail;
+    if(!image?.id||imageIds.has(image.id))return;
+    data.images.push(image);refreshDerivedData();updateReviewLabel();
+    category.value='';trip.value='';year.value='';researchStatus.value='';needsReview.checked=false;
+    search.value=image.uploadedBy||'';
+    tag.value=(image.tags||[]).find(value=>/^Contributor:/i.test(value))||'';
+    currentView='photos';currentPage=0;
+    $('photosViewButton').className='button button-primary';$('productsViewButton').className='button button-quiet';
+    $('photosViewButton').setAttribute('aria-pressed','true');$('productsViewButton').setAttribute('aria-pressed','false');
+    renderTagTools();renderReviewQueue();render();
+  });
+
   $('closeDetail').addEventListener('click',()=>detail.close()); detail.addEventListener('click',e=>{if(e.target===detail)detail.close()});
   search.addEventListener('input',()=>{currentPage=0;render()});
   [category,tag,trip,year,researchStatus,needsReview].forEach(el=>el.addEventListener('change',()=>{currentPage=0;render()}));
@@ -516,5 +574,6 @@
   $('productsViewButton').addEventListener('click',()=>{currentView='products';currentPage=0;$('productsViewButton').className='button button-primary';$('photosViewButton').className='button button-quiet';$('productsViewButton').setAttribute('aria-pressed','true');$('photosViewButton').setAttribute('aria-pressed','false');render()});
   $('previousPage').addEventListener('click',()=>{if(currentPage>0){currentPage--;render()}});
   $('nextPage').addEventListener('click',()=>{currentPage++;render()});
-  renderReviewQueue();renderTagTools();render();refreshSharedOverrides();
+  renderReviewQueue();renderTagTools();render();
+  loadCommunityCatalog().then(refreshSharedOverrides);
 })();

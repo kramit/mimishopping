@@ -2,6 +2,13 @@
   "routes": [
     { "route": "/api/tag-overrides", "methods": ["GET"], "allowedRoles": ["anonymous"] },
     { "route": "/api/tag-overrides/save-many", "methods": ["POST"], "allowedRoles": ["catalog_editor"] },
+    { "route": "/api/intakes", "methods": ["POST"], "allowedRoles": ["anonymous"] },
+    { "route": "/api/intakes/{id}/preview", "methods": ["GET"], "allowedRoles": ["anonymous"] },
+    { "route": "/api/intakes/{id}/retry", "methods": ["POST"], "allowedRoles": ["anonymous"] },
+    { "route": "/api/intakes/{id}/publish", "methods": ["POST"], "allowedRoles": ["anonymous"] },
+    { "route": "/api/intakes/{id}", "methods": ["GET"], "allowedRoles": ["anonymous"] },
+    { "route": "/api/catalog-items", "methods": ["GET"], "allowedRoles": ["anonymous"] },
+    { "route": "/api/catalog-items/{id}/hide", "methods": ["POST"], "allowedRoles": ["catalog_editor"] },
     { "route": "/.auth/login/github", "statusCode": 404 }
   ],
   "platform": { "apiRuntime": "node:22" },
