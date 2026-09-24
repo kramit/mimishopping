@@ -41,9 +41,10 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
 }
 
-resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' existing = {
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
   parent: storage
   name: 'default'
+  properties: { defaultServiceVersion: '2023-11-03' }
 }
 
 resource contributionsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {

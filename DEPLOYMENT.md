@@ -5,7 +5,7 @@
 - Subscription: Visual Studio B Dev Essentials.
 - Resource group: `webapps`, West Europe.
 - Azure Static Web Apps: Free plan, West Europe managed API, source `main` from this repository.
-- Storage: StorageV2, Standard LRS, Hot tier, HTTPS only, TLS 1.2; `gallery` Blob container exposes anonymous blob reads but not container listing. The `TagOverrides` Table is private.
+- Storage: StorageV2, Standard LRS, Hot tier, HTTPS only, TLS 1.2; `gallery` Blob container exposes anonymous blob reads but not container listing. Its default Blob REST version is pinned to `2023-11-03`, so anonymous downloads return each original's `Content-Disposition` header. The `TagOverrides` Table is private.
 - The photos and the catalog/research text are public. Do not store credentials or private notes in `catalog-data.js`.
 
 ## Custom domain
