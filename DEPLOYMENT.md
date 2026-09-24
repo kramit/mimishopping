@@ -12,7 +12,7 @@ Provision the resource group, then run `infra/main.bicep` with the storage and S
 
 ## GitHub deployment
 
-Add the Static Web Apps deployment token as the Actions secret `AZURE_STATIC_WEB_APPS_API_TOKEN`. The workflow deploys the repository root and `api/` on pushes to `main`. It does not deploy from pull requests.
+Add the Static Web Apps deployment token as the Actions secret `AZURE_STATIC_WEB_APPS_API_TOKEN`. The workflow deploys the repository root and `api/` when manually started from Actions. After the token is configured, enable the `main` push trigger for routine deployments. Pull requests do not deploy.
 
 ## Editor
 
